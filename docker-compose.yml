@@ -1,0 +1,15 @@
+version: "3.8"
+
+services:
+  llm-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: company_llm_container
+    volumes:
+      - .:/app
+    stdin_open: true
+    tty: true
+    environment:
+      - PYTHONUNBUFFERED=1
+      - AWS_DEFAULT_REGION=eu-central-1

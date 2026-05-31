@@ -1,0 +1,8 @@
+transformers
+datasets
+accelerate
+evaluate
+rouge_score
+peft
+pandas
+sqlalchemy

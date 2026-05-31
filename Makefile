@@ -1,0 +1,25 @@
+.PHONY: build up down run logs clean
+
+# Build the Docker image
+setup:
+	docker compose build
+
+# Start the container in the background
+start:
+	docker compose up -d
+
+# Stop and remove the container
+stop:
+	docker compose down
+
+# Run the main Python script (assuming main.py is your entrypoint)
+run:
+	docker compose run --rm llm-app python main.py
+
+# View container logs in real-time
+logs:
+	docker compose logs -f
+
+# Clean up Docker images, containers, and volumes
+clean:
+	docker compose down --rmi all --volumes
