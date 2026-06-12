@@ -22,4 +22,4 @@ RUN pip install --no-cache-dir --upgrade pip && \
 COPY . .
 
 # Default command to run the main script
-CMD ["python", "main.py"]
+CMD ["tail", "-f", "/dev/null"]

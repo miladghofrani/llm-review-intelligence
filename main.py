@@ -275,57 +275,6 @@ def load_saved_peft_model(device, adapter_path):
     print("✅ Base Model + LoRA Adapter assembled successfully!")
     return peft_model_for_inference
 
-def test_custom_review():
-    print("🚀 Loading the Production Model for Custom Inference...")
-    
-    device = "cpu"
-    
-    base_model_name = "google/flan-t5-base"
-    tokenizer = AutoTokenizer.from_pretrained(base_model_name)
-    base_model = AutoModelForSeq2SeqLM.from_pretrained(
-        base_model_name, 
-        torch_dtype=torch.float32
-    ).to(device)
-    
-    adapter_path = "./peft-dialogue-summary-checkpoint-local" 
-    try:
-        production_model = PeftModel.from_pretrained(
-            base_model, 
-            adapter_path, 
-            torch_dtype=torch.float32,
-            is_trainable=False
-        ).to(device)
-        print("✅ Custom LoRA Adapter attached successfully!\n")
-    except Exception as e:
-        print(f"❌ Error loading adapter. Ensure '{adapter_path}' exists.")
-        return
-
-    custom_review = """
-    I rented a car for my weekend trip to the mountains. The engine ran fine, 
-    but the interior was extremely dirty. There were sticky coffee stains on the passenger 
-    seat and the whole cabin smelled like cheap cigarette smoke. Also, their mobile app 
-    crashed twice when I tried to extend my rental period. Very frustrating experience!
-    """
-
-    prompt = f"Summarize the following review.\n\n{custom_review}\n\nSummary: "
-
-    inputs = tokenizer(prompt, return_tensors='pt').to(device)
-    
-    output_tokens = production_model.generate(
-        input_ids=inputs["input_ids"], 
-        max_new_tokens=50,
-        temperature=0.5,
-        do_sample=True
-    )[0]
-    
-    summary = tokenizer.decode(output_tokens, skip_special_tokens=True)
-
-    print("-" * 80)
-    print(f"📝 CUSTOM REVIEW:\n{custom_review.strip()}")
-    print("-" * 80)
-    print(f"✨ AI GENERATED SUMMARY:\n{summary}")
-    print("-" * 80)
-
 def main():
     """
     Main entry point for the LLM Review Classification & Summarization Pipeline.
@@ -373,5 +322,4 @@ def main():
     print("Ready for the next step!")
 
 if __name__ == "__main__":
-    test_custom_review()
-    # main()
+    main()

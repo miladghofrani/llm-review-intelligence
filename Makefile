@@ -16,6 +16,9 @@ stop:
 run:
 	docker compose run --rm llm-app python main.py
 
+console:
+	docker exec -it company_llm_container bash
+
 # View container logs in real-time
 logs:
 	docker compose logs -f
