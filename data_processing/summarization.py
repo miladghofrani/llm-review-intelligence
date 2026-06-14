@@ -22,20 +22,20 @@ def preprocess_dataset(tokenizer, dataset):
     print("\n⚙️ Step 4: Preprocessing and Tokenizing the Dataset...")
 
     def tokenize_function(example):
-        start_prompt = 'Summarize the following review.\n\n'
+        start_prompt = 'Summarize the following dialogue.\n\n'
         end_prompt = '\n\nSummary: '
 
-        safe_reviews = [str(review) if review is not None else "" for review in example["review_body"]]
-        safe_titles = [str(title) if title is not None else "" for title in example["review_title"]]
+        safe_dialogues = [str(dialogue) if dialogue is not None else "" for dialogue in example["dialogue"]]
+        safe_summaries = [str(summary) if summary is not None else "" for summary in example["summary"]]
 
-        prompt = [start_prompt + review + end_prompt for review in safe_reviews]
+        prompt = [start_prompt + dialogue + end_prompt for dialogue in safe_dialogues]
         example['input_ids'] = tokenizer(prompt, padding="max_length", truncation=True, return_tensors="pt").input_ids
-        example['labels'] = tokenizer(safe_titles, padding="max_length", truncation=True, return_tensors="pt").input_ids
+        example['labels'] = tokenizer(safe_summaries, padding="max_length", truncation=True, return_tensors="pt").input_ids
         return example
 
     tokenized_datasets = dataset.map(tokenize_function, batched=True)
     print(tokenized_datasets)
-    columns_to_remove = ['review_id', 'product_id', 'reviewer_id', 'stars', 'review_body', 'review_title', 'language', 'product_category']
+    columns_to_remove = ['id', 'dialogue', 'summary', 'topic']
     tokenized_datasets = tokenized_datasets.remove_columns(columns_to_remove)
     print("✅ Dataset successfully tokenized and cleaned.")
     return tokenized_datasets

@@ -20,21 +20,20 @@ def get_device():
     print("--------------------------------------------------")
     return device
 
-def main():
+def train_peft_model_for_summarization():
     device = get_device()
+
+    original_model, tokenizer = load_llm_model(device)
 
     # Train model for summarization base on dialogue dataset
     dataset = load_dialogue_dataset()
     tokenized_dataset = preprocess_dataset(tokenizer, dataset)
     small_tokenized_dataset = subsample_dataset(tokenized_dataset)
 
-    original_model, tokenizer = load_llm_model(device)
-
     peft_model = setup_peft_lora_model(original_model)
-    saved_peft_path = train_and_save_peft_model(peft_model, tokenizer, small_tokenized_dataset)
-    # production_model = load_saved_peft_model(device, saved_peft_path)
+    train_and_save_peft_model(peft_model, tokenizer, small_tokenized_dataset)
 
-    print("Ready for the next step!")
+    print("✅ PEFT training complete! You can now deploy the model for inference using the saved adapter weights.")
 
 if __name__ == "__main__":
-    main()
+    train_peft_model_for_summarization()

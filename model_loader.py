@@ -1,7 +1,6 @@
 import torch
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
-
 def print_number_of_trainable_model_parameters(model):
     trainable_model_params = 0
     all_model_params = 0
