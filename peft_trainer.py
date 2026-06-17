@@ -1,100 +1,78 @@
 import time
 import torch
 
+from config import (
+    ADAPTER_PATH,
+    LEARNING_RATE,
+    LORA_ALPHA,
+    LORA_DROPOUT,
+    LORA_RANK,
+    MAX_STEPS,
+    NUM_EPOCHS,
+)
 from model_loader import print_number_of_trainable_model_parameters
 from peft import LoraConfig, get_peft_model, TaskType, PeftModel
-from transformers import (
-    AutoModelForSeq2SeqLM, 
-    AutoTokenizer, 
-    GenerationConfig, 
-    TrainingArguments, 
-    Trainer
-)
+from transformers import TrainingArguments, Trainer
+
 
 def setup_peft_lora_model(original_model):
-    """
-    Applies LoRA to the base model, freezing the original weights and 
-    adding a small, trainable adapter.
-    """
-    print("\n🪄 Step 6: Injecting LoRA Adapters into the Model (PEFT)...")
-    
-    # Define the LoRA configuration based on the lab parameters
+    """Injects LoRA adapters into the base model, freezing the original weights."""
+    print("\n🪄 Injecting LoRA Adapters (PEFT)...")
+
     lora_config = LoraConfig(
-        r=32, # Rank of the adapter matrices
-        lora_alpha=32, # Scaling factor
-        target_modules=["q", "v"], # Targeting the Attention mechanism
-        lora_dropout=0.05, # Regularization to prevent overfitting
-        bias="none", 
-        task_type=TaskType.SEQ_2_SEQ_LM # Model type definition
+        r=LORA_RANK,
+        lora_alpha=LORA_ALPHA,
+        target_modules=["q", "v"],
+        lora_dropout=LORA_DROPOUT,
+        bias="none",
+        task_type=TaskType.SEQ_2_SEQ_LM,
     )
-    
-    # Wrap the original model with the PEFT model
+
     peft_model = get_peft_model(original_model, lora_config)
-    
-    print("✅ LoRA adapters injected successfully!")
-    
-    # Print the dramatic reduction in trainable parameters!
-    print("\n" + print_number_of_trainable_model_parameters(peft_model))
-    
+    print("✅ LoRA adapters injected.")
     return peft_model
 
+
 def train_and_save_peft_model(peft_model, tokenizer, tokenized_datasets):
-    """
-    Executes the PEFT training loop and saves ONLY the small adapter weights.
-    We keep max_steps=1 for the dry run.
-    """
-    print("\n🏋️ Step 7: Starting PEFT Training (Dry Run)...")
-    
-    output_dir = f'./peft-dialogue-summary-training-{str(int(time.time()))}'
-    
-    peft_training_args = TrainingArguments(
-        output_dir=output_dir,
+    """Runs the PEFT training loop and saves only the small adapter weights."""
+    run_dir = f"./peft-training-run-{int(time.time())}"
+
+    training_args = TrainingArguments(
+        output_dir=run_dir,
         auto_find_batch_size=True,
-        learning_rate=1e-3, 
-        num_train_epochs=1,
+        learning_rate=LEARNING_RATE,
+        num_train_epochs=NUM_EPOCHS,
         logging_steps=1,
-        max_steps=1  # <--- CRITICAL: Remove this in AWS production to train fully!
+        max_steps=MAX_STEPS if MAX_STEPS is not None else -1,
     )
-    
-    peft_trainer = Trainer(
+
+    mode = f"max_steps={MAX_STEPS}" if MAX_STEPS is not None else f"{NUM_EPOCHS} full epoch(s)"
+    print(f"\n🏋️  Starting PEFT training ({mode})...")
+
+    trainer = Trainer(
         model=peft_model,
-        args=peft_training_args,
+        args=training_args,
         train_dataset=tokenized_datasets["train"],
     )
-    
-    print("⏳ Running PEFT Trainer...")
-    peft_trainer.train()
-    
-    # Save the adapter and tokenizer locally
-    peft_model_path = "./peft-dialogue-summary-checkpoint-local"
-    peft_trainer.model.save_pretrained(peft_model_path)
-    tokenizer.save_pretrained(peft_model_path)
-    
-    print(f"✅ PEFT Model (Adapters) saved successfully in: {peft_model_path}")
-    return peft_model_path
 
-def load_saved_peft_model(device, adapter_path):
-    """
-    Simulates production deployment: Loads the base model and attaches 
-    the trained LoRA adapters for fast inference.
-    """
-    print("\n🚀 Step 8: Assembling the Production Model for Inference...")
-    
-    # 1. Load the base model again
-    model_name = "google/flan-t5-base"
-    peft_model_base = AutoModelForSeq2SeqLM.from_pretrained(
-        model_name, 
-        torch_dtype=torch.bfloat16
-    ).to(device)
-    
-    # 2. Attach the LoRA adapter we saved in Step 7
-    # is_trainable=False is crucial here for saving memory during inference
-    peft_model_for_inference = PeftModel.from_pretrained(
-        peft_model_base, 
-        adapter_path, 
+    trainer.train()
+
+    trainer.model.save_pretrained(ADAPTER_PATH)
+    tokenizer.save_pretrained(ADAPTER_PATH)
+    print(f"✅ Adapter weights saved to: {ADAPTER_PATH}")
+    return ADAPTER_PATH
+
+
+def load_saved_peft_model(device, base_model, adapter_path):
+    """Loads base model + LoRA adapters for inference."""
+    print(f"\n🚀 Loading PEFT model from {adapter_path}...")
+
+    peft_model = PeftModel.from_pretrained(
+        base_model,
+        adapter_path,
         torch_dtype=torch.bfloat16,
-        is_trainable=False
+        is_trainable=False,
     ).to(device)
-    
-    print("✅ Base Model + LoRA Adapter assembled successfully!")
-    return peft_model_for_inference
+
+    print("✅ Model ready for inference.")
+    return peft_model

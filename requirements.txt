@@ -1,8 +1,7 @@
-transformers
-datasets
-accelerate
-evaluate
-rouge_score
-peft
-pandas
-sqlalchemy
+transformers>=4.40.0
+datasets>=2.19.0
+accelerate>=0.29.0
+peft>=0.10.0
+sentencepiece>=0.2.0
+evaluate>=0.4.0
+rouge_score>=0.1.2
