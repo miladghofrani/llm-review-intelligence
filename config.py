@@ -2,7 +2,7 @@ import os
 
 # Model
 MODEL_NAME = os.getenv("MODEL_NAME", "google/flan-t5-base")
-ADAPTER_PATH = os.getenv("ADAPTER_PATH", "./checkpoint-local")
+ADAPTER_PATH = os.getenv("ADAPTER_PATH", "YOUR_HF_USERNAME/car-rental-peft-adapter")
 
 # Dataset — amazon_us_reviews has review_body (input) + review_headline (summary target)
 # Automotive_v1_00 is the closest public domain to car rental reviews
