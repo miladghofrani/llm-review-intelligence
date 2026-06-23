@@ -4,10 +4,10 @@ import os
 MODEL_NAME = os.getenv("MODEL_NAME", "google/flan-t5-base")
 ADAPTER_PATH = os.getenv("ADAPTER_PATH", "miladghofrani/car-rental-peft-adapter")
 
-# McAuley-Lab/Amazon-Reviews-2023 is the script-free replacement for amazon_us_reviews
-# raw_review_Automotive has 'text' (body) + 'title' (headline), loaded via Parquet
-DATASET_NAME = "McAuley-Lab/Amazon-Reviews-2023"
-DATASET_SUBSET = os.getenv("DATASET_SUBSET", "raw_review_Automotive")
+# fancyzhx/amazon_polarity is a Parquet-native re-upload with no loading script
+# Columns: title (headline), content (body), label (0=neg / 1=pos)
+DATASET_NAME = "fancyzhx/amazon_polarity"
+DATASET_SUBSET = os.getenv("DATASET_SUBSET", "")
 
 # Training — set MAX_STEPS=0 (or unset) for full training, any positive int for dry run
 MAX_STEPS = int(os.getenv("MAX_STEPS", "1")) or None

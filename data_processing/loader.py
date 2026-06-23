@@ -1,33 +1,12 @@
-import requests
-from datasets import load_dataset, Dataset, DatasetDict
-from config import DATASET_NAME, DATASET_SUBSET, SUBSAMPLE_RATIO, CATEGORIES
-from data_processing.labeler import label_review, format_labels
-
-
 def load_review_dataset():
     """
-    Loads automotive reviews via Parquet files from the HF Datasets Server.
-    Bypasses script-based loading (removed in datasets 3.x).
-    Fields used: review_body (input text), review_headline (summary target).
+    Loads fancyzhx/amazon_polarity — a Parquet-native dataset with no loading script.
+    Columns: title (headline), content (body), label (0=neg / 1=pos).
     """
-    print(f"\n📥 Loading {DATASET_NAME} / {DATASET_SUBSET} from Hugging Face...")
+    print(f"\n📥 Loading {DATASET_NAME} from Hugging Face...")
 
-    api_url = (
-        f"https://datasets-server.huggingface.co/parquet"
-        f"?dataset={DATASET_NAME}&config={DATASET_SUBSET}"
-    )
-    resp = requests.get(api_url, timeout=30)
-    resp.raise_for_status()
-    parquet_urls = [f["url"] for f in resp.json().get("parquet_files", [])]
-
-    if not parquet_urls:
-        raise RuntimeError(
-            f"No Parquet files found for {DATASET_NAME}/{DATASET_SUBSET}.\n"
-            f"Check: {api_url}"
-        )
-
-    raw = load_dataset("parquet", data_files={"train": parquet_urls}, split="train")
-    raw = raw.rename_columns({"text": "review_body", "title": "review_headline"})
+    raw = load_dataset(DATASET_NAME, split="train")
+    raw = raw.rename_columns({"content": "review_body", "title": "review_headline"})
     dataset = DatasetDict({"train": raw})
 
     print(f"✅ Loaded {dataset['train'].num_rows:,} reviews")
