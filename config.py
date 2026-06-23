@@ -2,12 +2,12 @@ import os
 
 # Model
 MODEL_NAME = os.getenv("MODEL_NAME", "google/flan-t5-base")
-ADAPTER_PATH = os.getenv("ADAPTER_PATH", "YOUR_HF_USERNAME/car-rental-peft-adapter")
+ADAPTER_PATH = os.getenv("ADAPTER_PATH", "miladghofrani/car-rental-peft-adapter")
 
-# Dataset — amazon_us_reviews has review_body (input) + review_headline (summary target)
-# Automotive_v1_00 is the closest public domain to car rental reviews
-DATASET_NAME = "amazon_us_reviews"
-DATASET_SUBSET = os.getenv("DATASET_SUBSET", "Automotive_v1_00")
+# McAuley-Lab/Amazon-Reviews-2023 is the script-free replacement for amazon_us_reviews
+# raw_review_Automotive has 'text' (body) + 'title' (headline), loaded via Parquet
+DATASET_NAME = "McAuley-Lab/Amazon-Reviews-2023"
+DATASET_SUBSET = os.getenv("DATASET_SUBSET", "raw_review_Automotive")
 
 # Training — set MAX_STEPS=0 (or unset) for full training, any positive int for dry run
 MAX_STEPS = int(os.getenv("MAX_STEPS", "1")) or None
