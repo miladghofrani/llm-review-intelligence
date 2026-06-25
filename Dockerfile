@@ -21,5 +21,5 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # Copy the rest of the application code
 COPY . .
 
-# Default command to run the main script
-CMD ["tail", "-f", "/dev/null"]
+# Load model once at startup and serve requests
+CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8742"]

@@ -16,6 +16,9 @@ stop:
 run:
 	docker compose run --rm llm-app python main.py
 
+serve:
+	docker compose up
+
 console:
 	docker exec -it company_llm_container bash
 

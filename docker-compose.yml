@@ -8,8 +8,11 @@ services:
     container_name: company_llm_container
     volumes:
       - .:/app
+    ports:
+      - "8742:8742"
     stdin_open: true
     tty: true
     environment:
       - PYTHONUNBUFFERED=1
       - AWS_DEFAULT_REGION=eu-central-1
+      - HF_TOKEN=${HF_TOKEN}
