@@ -12,6 +12,12 @@ services:
       - "8742:8742"
     stdin_open: true
     tty: true
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8742/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 60s
     environment:
       - PYTHONUNBUFFERED=1
       - AWS_DEFAULT_REGION=eu-central-1

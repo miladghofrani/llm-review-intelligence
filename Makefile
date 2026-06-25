@@ -4,9 +4,14 @@
 setup:
 	docker compose build
 
-# Start the container in the background
+# Start the container in the background and wait until healthy
 start:
 	docker compose up -d
+	@echo "Waiting for service to become healthy..."
+	@until [ "$$(docker inspect --format='{{.State.Health.Status}}' company_llm_container 2>/dev/null)" = "healthy" ]; do \
+		sleep 5; \
+	done
+	@echo "Started"
 
 # Stop and remove the container
 stop:

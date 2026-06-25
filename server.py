@@ -70,6 +70,37 @@ def _run_inference(review: str) -> ReviewResponse:
     return ReviewResponse(review=review, summary=summary, categories=categories)
 
 
+def _run_batch_inference(reviews: List[str]) -> List[ReviewResponse]:
+    tokenizer = _state["tokenizer"]
+    model = _state["model"]
+    device = _state["device"]
+    categories_str = _state["categories_str"]
+
+    summary_prompts = [
+        f"Summarize the following car rental review.\n\n{r}\n\nSummary:"
+        for r in reviews
+    ]
+    category_prompts = [
+        f"Classify this car rental review into one or more of these categories: "
+        f"{categories_str}.\n\nReview: {r}\n\nCategories:"
+        for r in reviews
+    ]
+
+    # One generate() call per task type instead of one per review
+    summary_inputs = tokenizer(summary_prompts, return_tensors="pt", padding=True, truncation=True, max_length=512).to(device)
+    summary_tokens = model.generate(input_ids=summary_inputs["input_ids"], attention_mask=summary_inputs["attention_mask"], max_new_tokens=60, do_sample=False)
+    summaries = tokenizer.batch_decode(summary_tokens, skip_special_tokens=True)
+
+    category_inputs = tokenizer(category_prompts, return_tensors="pt", padding=True, truncation=True, max_length=512).to(device)
+    category_tokens = model.generate(input_ids=category_inputs["input_ids"], attention_mask=category_inputs["attention_mask"], max_new_tokens=40, do_sample=False)
+    categories = tokenizer.batch_decode(category_tokens, skip_special_tokens=True)
+
+    return [
+        ReviewResponse(review=review, summary=summary, categories=cats)
+        for review, summary, cats in zip(reviews, summaries, categories)
+    ]
+
+
 @app.post("/infer", response_model=ReviewResponse)
 def infer(req: ReviewRequest):
     return _run_inference(req.review)
@@ -77,7 +108,7 @@ def infer(req: ReviewRequest):
 
 @app.post("/infer/batch", response_model=List[ReviewResponse])
 def infer_batch(req: BatchReviewRequest):
-    return [_run_inference(review) for review in req.reviews]
+    return _run_batch_inference(req.reviews)
 
 
 @app.get("/health")
