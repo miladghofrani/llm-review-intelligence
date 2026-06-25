@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+from typing import List
 
 from fastapi import FastAPI
 from pydantic import BaseModel
@@ -38,33 +39,45 @@ class ReviewRequest(BaseModel):
 
 
 class ReviewResponse(BaseModel):
+    review: str
     summary: str
     categories: str
 
 
-@app.post("/infer", response_model=ReviewResponse)
-def infer(req: ReviewRequest):
+class BatchReviewRequest(BaseModel):
+    reviews: List[str]
+
+
+def _run_inference(review: str) -> ReviewResponse:
     tokenizer = _state["tokenizer"]
     model = _state["model"]
     device = _state["device"]
     categories_str = _state["categories_str"]
 
-    # Summarization
-    summary_prompt = f"Summarize the following car rental review.\n\n{req.review}\n\nSummary:"
+    summary_prompt = f"Summarize the following car rental review.\n\n{review}\n\nSummary:"
     summary_inputs = tokenizer(summary_prompt, return_tensors="pt", truncation=True, max_length=512).to(device)
     summary_tokens = model.generate(input_ids=summary_inputs["input_ids"], max_new_tokens=60, do_sample=False)[0]
     summary = tokenizer.decode(summary_tokens, skip_special_tokens=True)
 
-    # Classification
     category_prompt = (
         f"Classify this car rental review into one or more of these categories: "
-        f"{categories_str}.\n\nReview: {req.review}\n\nCategories:"
+        f"{categories_str}.\n\nReview: {review}\n\nCategories:"
     )
     category_inputs = tokenizer(category_prompt, return_tensors="pt", truncation=True, max_length=512).to(device)
     category_tokens = model.generate(input_ids=category_inputs["input_ids"], max_new_tokens=40, do_sample=False)[0]
     categories = tokenizer.decode(category_tokens, skip_special_tokens=True)
 
-    return ReviewResponse(summary=summary, categories=categories)
+    return ReviewResponse(review=review, summary=summary, categories=categories)
+
+
+@app.post("/infer", response_model=ReviewResponse)
+def infer(req: ReviewRequest):
+    return _run_inference(req.review)
+
+
+@app.post("/infer/batch", response_model=List[ReviewResponse])
+def infer_batch(req: BatchReviewRequest):
+    return [_run_inference(review) for review in req.reviews]
 
 
 @app.get("/health")
