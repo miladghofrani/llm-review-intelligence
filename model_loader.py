@@ -29,7 +29,7 @@ def load_tokenizer(model_name='google/flan-t5-base'):
 def load_llm_model(device, model_name='google/flan-t5-base'):
     print("\n🧠 Loading the LLM...")
     target_dtype = torch.bfloat16 if device == "cuda" else torch.float32
-    model = AutoModelForSeq2SeqLM.from_pretrained(model_name, torch_dtype=target_dtype).to(device)
+    model = AutoModelForSeq2SeqLM.from_pretrained(model_name, dtype=target_dtype).to(device)
     print(f"✅ {model_name} loaded using {target_dtype}.")
     return model
 

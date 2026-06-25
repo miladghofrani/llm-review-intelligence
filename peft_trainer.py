@@ -70,7 +70,7 @@ def load_saved_peft_model(device, base_model, adapter_path):
     peft_model = PeftModel.from_pretrained(
         base_model,
         adapter_path,
-        torch_dtype=torch.bfloat16,
+        dtype=torch.bfloat16,
         is_trainable=False,
     ).to(device)
 
