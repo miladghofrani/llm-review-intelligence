@@ -26,7 +26,7 @@ async def lifespan(app: FastAPI):
     _state["tokenizer"] = tokenizer
     _state["model"] = model
     _state["categories_str"] = ", ".join(CATEGORIES)
-    _state["translator"] = Translator(device)
+    _state["translator"] = Translator()
 
     print("\n✅ Server ready — waiting for requests.\n")
     yield
