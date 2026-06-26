@@ -8,6 +8,7 @@ services:
     container_name: company_llm_container
     volumes:
       - .:/app
+      - hf-cache:/root/.cache/huggingface
     ports:
       - "8742:8742"
     stdin_open: true
@@ -22,3 +23,6 @@ services:
       - PYTHONUNBUFFERED=1
       - AWS_DEFAULT_REGION=eu-central-1
       - HF_TOKEN=${HF_TOKEN}
+
+volumes:
+  hf-cache:

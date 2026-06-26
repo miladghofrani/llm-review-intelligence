@@ -61,7 +61,11 @@ def _run_inference(review: str) -> ReviewResponse:
 
     summary_prompt = f"Summarize the following car rental review.\n\n{english_review}\n\nSummary:"
     summary_inputs = tokenizer(summary_prompt, return_tensors="pt", truncation=True, max_length=512).to(device)
-    summary_tokens = model.generate(input_ids=summary_inputs["input_ids"], max_new_tokens=60, do_sample=False)[0]
+    summary_tokens = model.generate(
+        input_ids=summary_inputs["input_ids"],
+        max_new_tokens=60, do_sample=False,
+        repetition_penalty=1.3, no_repeat_ngram_size=3,
+    )[0]
     summary = tokenizer.decode(summary_tokens, skip_special_tokens=True)
 
     category_prompt = (
@@ -69,7 +73,11 @@ def _run_inference(review: str) -> ReviewResponse:
         f"{categories_str}.\n\nReview: {english_review}\n\nCategories:"
     )
     category_inputs = tokenizer(category_prompt, return_tensors="pt", truncation=True, max_length=512).to(device)
-    category_tokens = model.generate(input_ids=category_inputs["input_ids"], max_new_tokens=40, do_sample=False)[0]
+    category_tokens = model.generate(
+        input_ids=category_inputs["input_ids"],
+        max_new_tokens=40, do_sample=False,
+        repetition_penalty=1.3, no_repeat_ngram_size=3,
+    )[0]
     categories = tokenizer.decode(category_tokens, skip_special_tokens=True)
 
     return ReviewResponse(review=review, detected_language=detected_language, summary=summary, categories=categories)
@@ -97,11 +105,21 @@ def _run_batch_inference(reviews: List[str]) -> List[ReviewResponse]:
 
     # One generate() call per task type instead of one per review
     summary_inputs = tokenizer(summary_prompts, return_tensors="pt", padding=True, truncation=True, max_length=512).to(device)
-    summary_tokens = model.generate(input_ids=summary_inputs["input_ids"], attention_mask=summary_inputs["attention_mask"], max_new_tokens=60, do_sample=False)
+    summary_tokens = model.generate(
+        input_ids=summary_inputs["input_ids"],
+        attention_mask=summary_inputs["attention_mask"],
+        max_new_tokens=60, do_sample=False,
+        repetition_penalty=1.3, no_repeat_ngram_size=3,
+    )
     summaries = tokenizer.batch_decode(summary_tokens, skip_special_tokens=True)
 
     category_inputs = tokenizer(category_prompts, return_tensors="pt", padding=True, truncation=True, max_length=512).to(device)
-    category_tokens = model.generate(input_ids=category_inputs["input_ids"], attention_mask=category_inputs["attention_mask"], max_new_tokens=40, do_sample=False)
+    category_tokens = model.generate(
+        input_ids=category_inputs["input_ids"],
+        attention_mask=category_inputs["attention_mask"],
+        max_new_tokens=40, do_sample=False,
+        repetition_penalty=1.3, no_repeat_ngram_size=3,
+    )
     categories = tokenizer.batch_decode(category_tokens, skip_special_tokens=True)
 
     return [
