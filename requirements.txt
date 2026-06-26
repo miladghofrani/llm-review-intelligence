@@ -1,5 +1,6 @@
 fastapi>=0.111.0
 langdetect>=1.0.9
+sacremoses>=0.1.1
 uvicorn>=0.29.0
 transformers>=4.40.0
 datasets>=2.19.0
