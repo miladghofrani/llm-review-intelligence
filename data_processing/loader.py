@@ -1,20 +1,35 @@
+from pathlib import Path
+
+from datasets import load_dataset, Dataset, DatasetDict
+
+from config import CATEGORIES
+
+LOCAL_FILE = Path(__file__).parent / "car_rental_reviews.jsonl"
+HF_DATASET = "miladghofrani/car-rental-reviews"
+
+
 def load_review_dataset():
     """
-    Loads fancyzhx/amazon_polarity — a Parquet-native dataset with no loading script.
-    Columns: title (headline), content (body), label (0=neg / 1=pos).
+    Loads the car rental review dataset.
+    Uses the local JSONL file if available, otherwise loads from HF Hub.
+    Columns: review_body, summary, categories.
     """
-    print(f"\n📥 Loading {DATASET_NAME} from Hugging Face...")
+    if LOCAL_FILE.exists():
+        print(f"\n📥 Loading local dataset from {LOCAL_FILE.name}...")
+        raw = load_dataset("json", data_files={"train": str(LOCAL_FILE)}, split="train")
+    else:
+        print(f"\n📥 Loading dataset from HF Hub ({HF_DATASET})...")
+        raw = load_dataset(HF_DATASET, split="train")
 
-    raw = load_dataset(DATASET_NAME, split="train")
-    raw = raw.rename_columns({"content": "review_body", "title": "review_headline"})
     dataset = DatasetDict({"train": raw})
-
     print(f"✅ Loaded {dataset['train'].num_rows:,} reviews")
+
     sample = dataset["train"][0]
     print("\n🔍 Sample Review:")
     print("-" * 60)
-    print(f"Review : {sample['review_body'][:200]}...")
-    print(f"Headline: {sample['review_headline']}")
+    print(f"Review    : {sample['review_body'][:200]}...")
+    print(f"Summary   : {sample['summary']}")
+    print(f"Categories: {sample['categories']}")
     print("-" * 60)
 
     return dataset
@@ -22,43 +37,36 @@ def load_review_dataset():
 
 def build_multitask_dataset(dataset):
     """
-    Converts raw reviews into two training example types per review:
-
-    1. Summarization  → input: full review  /  output: review headline
-    2. Classification → input: full review  /  output: comma-separated categories
+    Converts raw reviews into two training examples per review:
+    1. Summarization  — input: full review  /  output: summary
+    2. Classification — input: full review  /  output: comma-separated categories
 
     Returns a DatasetDict with 'train' and 'test' splits (90/10).
     """
-    print(f"\n⚙️  Building multi-task examples (1 in every {SUBSAMPLE_RATIO} reviews)...")
+    print(f"\n⚙️  Building multi-task examples...")
 
     categories_str = ", ".join(CATEGORIES)
     inputs, outputs = [], []
 
-    train_split = dataset["train"]
-    for idx, row in enumerate(train_split):
-        if idx % SUBSAMPLE_RATIO != 0:
+    for row in dataset["train"]:
+        body       = (row.get("review_body") or "").strip()
+        summary    = (row.get("summary") or "").strip()
+        categories = row.get("categories") or []
+
+        if not body or not summary:
             continue
 
-        body = (row.get("review_body") or "").strip()
-        headline = (row.get("review_headline") or "").strip()
-        if not body or not headline:
-            continue
-
-        # --- Summarization example ---
         inputs.append(f"Summarize the following car rental review.\n\n{body}\n\nSummary:")
-        outputs.append(headline)
+        outputs.append(summary)
 
-        # --- Classification example ---
         inputs.append(
             f"Classify this car rental review into one or more of these categories: "
-            f"{categories_str}.\n\n"
-            f"Review: {body}\n\nCategories:"
+            f"{categories_str}.\n\nReview: {body}\n\nCategories:"
         )
-        outputs.append(format_labels(label_review(body)))
+        outputs.append(", ".join(categories) if categories else "Staff & Communication")
 
     full = Dataset.from_dict({"input": inputs, "output": outputs})
     split = full.train_test_split(test_size=0.1, seed=42)
 
     print(f"✅ {split['train'].num_rows:,} train / {split['test'].num_rows:,} validation examples")
-    print(f"   (each review generates one summarization + one classification example)")
     return split

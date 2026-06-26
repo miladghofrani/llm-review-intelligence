@@ -2,45 +2,56 @@ from config import CATEGORIES
 
 # Keywords that signal each category. A review can match multiple categories.
 CATEGORY_KEYWORDS = {
+    "Cleanliness": [
+        "dirty", "unclean", "filthy", "clean", "spotless", "smell", "smells",
+        "smelly", "odor", "stain", "stained", "cigarette", "smoke", "pet hair",
+        "debris", "dusty", "greasy", "sticky", "trash", "garbage", "hygiene",
+        "disgusting", "immaculate", "fresh", "washed",
+    ],
     "Vehicle Condition": [
-        "dirty", "unclean", "filthy", "damage", "damaged", "scratch", "scratched",
-        "dent", "dented", "smell", "smells", "smelly", "odor", "stain", "stained",
+        "damage", "damaged", "scratch", "scratched", "dent", "dented", "rust",
         "mechanical", "breakdown", "broke down", "engine", "tire", "flat tire",
         "broken", "malfunction", "defect", "defective", "worn", "old car",
-        "maintenance", "warning light", "check engine", "interior", "exterior",
-        "cigarette", "smoke", "pet hair", "debris", "rust",
+        "warning light", "check engine", "bald tires", "brakes", "noise",
+        "accident", "recalled", "unsafe", "rattling", "wrong car", "model",
     ],
-    "Customer Service": [
+    "Pickup Experience": [
+        "pickup", "pick up", "pick-up", "collection", "queue", "line", "wait",
+        "waiting", "long wait", "delay", "delayed", "counter", "desk", "shuttle",
+        "bus", "airport", "station", "ready", "not ready", "check-in", "key",
+        "fast pickup", "smooth pickup", "slow", "crowded",
+    ],
+    "Return Experience": [
+        "return", "drop off", "drop-off", "return process", "return desk",
+        "damage inspection", "damage claim", "false damage", "dispute",
+        "deposit refund", "refund", "charge after return", "check-out",
+        "return location", "after hours", "key drop", "receipt",
+    ],
+    "Hidden Fees & Billing": [
+        "hidden fee", "hidden charge", "extra charge", "unexpected charge",
+        "overcharge", "surcharge", "unauthorized charge", "billing error",
+        "invoice", "receipt", "deposit", "credit card", "fraud", "scam",
+        "misleading price", "price difference", "overpriced", "expensive",
+        "fuel charge", "toll charge", "administration fee",
+    ],
+    "Insurance & Upselling": [
+        "insurance", "coverage", "liability", "waiver", "cdw", "collision",
+        "damage waiver", "excess", "deductible", "upsell", "pressure",
+        "pushed", "forced", "mandatory", "optional", "decline", "policy",
+        "fine print", "terms", "claim", "accident report",
+    ],
+    "Staff & Communication": [
         "staff", "agent", "employee", "representative", "rude", "polite",
-        "helpful", "unhelpful", "attitude", "customer service", "support",
-        "communication", "friendly", "unfriendly", "professional", "unprofessional",
-        "manager", "counter", "ignored", "dismissive", "disrespectful",
-        "wait time", "long wait", "no one helped",
+        "helpful", "unhelpful", "friendly", "unfriendly", "professional",
+        "unprofessional", "attitude", "ignored", "dismissive", "disrespectful",
+        "language", "english", "communication", "manager", "helpful staff",
+        "great service", "poor service", "no one helped",
     ],
-    "Pricing & Billing": [
-        "charge", "charged", "overcharge", "fee", "fees", "hidden fee",
-        "price", "expensive", "cost", "billing", "invoice", "refund",
-        "deposit", "credit card", "extra charge", "surcharge", "unauthorized",
-        "fraud", "scam", "money", "payment", "receipt", "tax", "overpriced",
-        "misleading price", "unexpected charge",
-    ],
-    "Insurance & Documents": [
-        "insurance", "coverage", "liability", "contract", "agreement",
-        "document", "fine print", "terms", "conditions", "policy",
-        "waiver", "cdw", "collision", "damage waiver", "excess",
-        "deductible", "claim", "accident report", "paperwork", "sign",
-    ],
-    "Pickup & Return": [
-        "pickup", "pick up", "pick-up", "return", "drop off", "drop-off",
-        "wait", "waiting", "queue", "long wait", "delay", "delayed",
-        "location", "shuttle", "bus", "airport", "station", "ready",
-        "not ready", "line", "check-in", "check-out", "key",
-    ],
-    "App & Booking": [
+    "Booking & App": [
         "app", "application", "website", "online", "booking", "book",
         "reservation", "confirm", "confirmation", "email", "notification",
-        "crash", "error", "bug", "glitch", "slow", "update",
-        "interface", "digital", "portal", "system", "platform", "login",
+        "crash", "error", "bug", "glitch", "slow", "update", "interface",
+        "portal", "login", "voucher", "change", "cancellation", "modify",
     ],
 }
 
