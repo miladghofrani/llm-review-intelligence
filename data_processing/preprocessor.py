@@ -5,6 +5,8 @@ def tokenize_dataset(tokenizer, dataset):
     """
     print("\n⚙️  Tokenizing dataset for seq2seq training...")
 
+    pad_id = tokenizer.pad_token_id
+
     def tokenize(batch):
         model_inputs = tokenizer(
             batch["input"],
@@ -18,7 +20,11 @@ def tokenize_dataset(tokenizer, dataset):
             truncation=True,
             max_length=128,
         )
-        model_inputs["labels"] = labels["input_ids"]
+        # Replace padding in labels with -100 so the loss ignores them
+        model_inputs["labels"] = [
+            [(t if t != pad_id else -100) for t in label]
+            for label in labels["input_ids"]
+        ]
         return model_inputs
 
     tokenized = dataset.map(tokenize, batched=True, remove_columns=["input", "output"])
