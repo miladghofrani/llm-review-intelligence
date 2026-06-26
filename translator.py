@@ -1,4 +1,5 @@
-from transformers import pipeline as hf_pipeline
+import torch
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 from langdetect import detect, LangDetectException
 
 TRANSLATION_MODELS = {
@@ -9,11 +10,16 @@ TRANSLATION_MODELS = {
 
 class Translator:
     def __init__(self, device: str):
-        pipeline_device = 0 if device == "cuda" else -1
-        self._pipelines = {
-            lang: hf_pipeline("translation", model=model, device=pipeline_device)
-            for lang, model in TRANSLATION_MODELS.items()
-        }
+        self._device = device
+        dtype = torch.float16 if device == "cuda" else torch.float32
+        self._tokenizers = {}
+        self._models = {}
+        for lang, model_name in TRANSLATION_MODELS.items():
+            self._tokenizers[lang] = AutoTokenizer.from_pretrained(model_name)
+            self._models[lang] = AutoModelForSeq2SeqLM.from_pretrained(
+                model_name, dtype=dtype
+            ).to(device)
+            self._models[lang].eval()
         print("✅ Translation models loaded (de, fr → en)")
 
     def _detect(self, text: str) -> str:
@@ -22,13 +28,22 @@ class Translator:
         except LangDetectException:
             return "en"
 
+    def _translate(self, lang: str, texts: list[str]) -> list[str]:
+        tokenizer = self._tokenizers[lang]
+        model = self._models[lang]
+        inputs = tokenizer(
+            texts, return_tensors="pt", padding=True, truncation=True, max_length=512
+        ).to(self._device)
+        with torch.no_grad():
+            tokens = model.generate(**inputs, max_new_tokens=512)
+        return tokenizer.batch_decode(tokens, skip_special_tokens=True)
+
     def to_english(self, text: str) -> tuple[str, str]:
         """Returns (english_text, detected_language)."""
         lang = self._detect(text)
-        if lang not in self._pipelines:
+        if lang not in self._models:
             return text, lang
-        result = self._pipelines[lang](text, max_length=512)
-        return result[0]["translation_text"], lang
+        return self._translate(lang, [text])[0], lang
 
     def batch_to_english(self, texts: list[str]) -> list[tuple[str, str]]:
         """Translate a batch, grouping by language for efficiency."""
@@ -40,11 +55,10 @@ class Translator:
 
         translated = list(texts)
         for lang, indices in groups.items():
-            if lang not in self._pipelines:
+            if lang not in self._models:
                 continue
-            batch = [texts[i] for i in indices]
-            results = self._pipelines[lang](batch, max_length=512, batch_size=len(batch))
-            for i, r in zip(indices, results):
-                translated[i] = r["translation_text"]
+            results = self._translate(lang, [texts[i] for i in indices])
+            for i, result in zip(indices, results):
+                translated[i] = result
 
         return list(zip(translated, langs))
