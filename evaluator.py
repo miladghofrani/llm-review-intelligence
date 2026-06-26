@@ -23,11 +23,12 @@ class RougeEvaluator:
         self.rouge        = evaluate.load("rouge")
 
         print("Loading tokenizer and models...")
-        self.tokenizer    = load_tokenizer(MODEL_NAME)
-        base_model        = load_llm_model(self.device, MODEL_NAME)
-        self.base_model   = base_model
-        self.peft_model   = load_saved_peft_model(self.device, base_model, adapter_path)
+        self.tokenizer  = load_tokenizer(MODEL_NAME)
+        # Load base model twice so PEFT wrapping doesn't affect the reference copy
+        self.base_model = load_llm_model(self.device, MODEL_NAME)
         self.base_model.eval()
+        peft_base       = load_llm_model(self.device, MODEL_NAME)
+        self.peft_model = load_saved_peft_model(self.device, peft_base, adapter_path)
         self.peft_model.eval()
         print("✅ Models ready.\n")
 
@@ -37,7 +38,11 @@ class RougeEvaluator:
         with torch.no_grad():
             tokens = model.generate(
                 input_ids=inputs["input_ids"],
-                generation_config=GenerationConfig(max_new_tokens=80),
+                generation_config=GenerationConfig(
+                    max_new_tokens=80,
+                    repetition_penalty=1.3,
+                    no_repeat_ngram_size=3,
+                ),
             )
         return self.tokenizer.decode(tokens[0], skip_special_tokens=True)
 
@@ -51,21 +56,24 @@ class RougeEvaluator:
         Returns:
             DataFrame with one row per sample showing reference, base, and peft summaries.
         """
-        test_split = dataset["test"]
-        n = min(self.num_samples, len(test_split))
-        print(f"Running inference on {n} samples...\n")
+        # Keep only summarization examples (not classification)
+        summarization_rows = [
+            row for row in dataset["test"]
+            if row["input"].startswith("Summarize")
+        ]
+        n = min(self.num_samples, len(summarization_rows))
+        print(f"Running inference on {n} summarization samples...\n")
 
-        references, base_summaries, peft_summaries = [], [], []
+        references, base_summaries, peft_summaries, reviews = [], [], [], []
 
-        for i in range(n):
-            # Extract the review body from the summarization prompt
-            prompt_text = test_split[i]["input"]
-            review = prompt_text.split("\n\n")[1] if "\n\n" in prompt_text else prompt_text
-            reference = test_split[i]["output"]
+        for i, row in enumerate(summarization_rows[:n]):
+            review = row["input"].split("\n\n")[1]
+            reference = row["output"]
 
             base_out = self._summarize(self.base_model, review)
             peft_out = self._summarize(self.peft_model, review)
 
+            reviews.append(review)
             references.append(reference)
             base_summaries.append(base_out)
             peft_summaries.append(peft_out)
@@ -74,10 +82,10 @@ class RougeEvaluator:
                 print(f"  {i + 1}/{n} done...")
 
         df = pd.DataFrame({
-            "review":       [test_split[i]["input"].split("\n\n")[1] for i in range(n)],
-            "reference":    references,
-            "base_model":   base_summaries,
-            "peft_model":   peft_summaries,
+            "review":     reviews,
+            "reference":  references,
+            "base_model": base_summaries,
+            "peft_model": peft_summaries,
         })
 
         self._print_scores(references, base_summaries, peft_summaries)
