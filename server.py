@@ -64,7 +64,8 @@ def _run_inference(review: str) -> ReviewResponse:
     summary_tokens = model.generate(
         input_ids=summary_inputs["input_ids"],
         max_new_tokens=60, do_sample=False,
-        repetition_penalty=1.3, no_repeat_ngram_size=3,
+        num_beams=4, early_stopping=True,
+        no_repeat_ngram_size=3,
     )[0]
     summary = tokenizer.decode(summary_tokens, skip_special_tokens=True)
 
@@ -109,7 +110,8 @@ def _run_batch_inference(reviews: List[str]) -> List[ReviewResponse]:
         input_ids=summary_inputs["input_ids"],
         attention_mask=summary_inputs["attention_mask"],
         max_new_tokens=60, do_sample=False,
-        repetition_penalty=1.3, no_repeat_ngram_size=3,
+        num_beams=4, early_stopping=True,
+        no_repeat_ngram_size=3,
     )
     summaries = tokenizer.batch_decode(summary_tokens, skip_special_tokens=True)
 
