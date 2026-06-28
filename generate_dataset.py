@@ -1,7 +1,6 @@
 """
-Generates 10,000 synthetic car rental reviews using HuggingFace Inference API.
-Uses your existing HF_TOKEN from .env — no extra billing needed.
-Saves to data_processing/car_rental_reviews.jsonl (resumes if interrupted).
+Generates synthetic car rental reviews using Groq API (Llama 3.3 70B).
+Saves to data_processing/car_rental_reviews.jsonl — resumes if interrupted.
 
 Usage:
     python3 generate_dataset.py
@@ -13,16 +12,16 @@ import time
 from pathlib import Path
 
 from dotenv import load_dotenv
-from huggingface_hub import InferenceClient
+from groq import Groq
 
 load_dotenv()
 
 # ── Config ─────────────────────────────────────────────────────────────────
-HF_TOKEN    = os.environ.get("HF_TOKEN", "")
-OUTPUT_FILE = Path("data_processing/car_rental_reviews.jsonl")
-TOTAL       = 10_000
-BATCH_SIZE  = 25   # smaller batches are more reliable on free tier
-MODEL       = "Qwen/Qwen2.5-72B-Instruct"
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
+OUTPUT_FILE  = Path("data_processing/car_rental_reviews.jsonl")
+TOTAL        = 10_000
+BATCH_SIZE   = 20    # Groq free tier: ~6k req/day, keep batches small
+MODEL        = "llama-3.3-70b-versatile"
 
 CATEGORIES = [
     "Cleanliness",
@@ -50,7 +49,7 @@ Rules:
 - Summaries must genuinely condense the review — not just repeat the first sentence
 - For POSITIVE reviews the summary must NOT contain "but" or any negative clause
 - For NEGATIVE reviews the summary must NOT contain "however" or any positive clause
-- For MIXED reviews use "however" or "but" to contrast the pros and cons
+- For MIXED reviews use "however" or "but" to contrast pros and cons
 
 Examples:
 {{"review_body": "Fantastic experience from start to finish. The car was spotless and ready on time. Staff were friendly and professional with no upselling pressure whatsoever. Return at Lyon airport took under five minutes.", "summary": "Smooth and pleasant rental experience with a clean car and professional staff. Pickup and return were both fast and hassle-free.", "categories": ["Cleanliness", "Pickup Experience", "Return Experience"]}}
@@ -67,11 +66,12 @@ def count_existing() -> int:
         return sum(1 for _ in f)
 
 
-def generate_batch(client: InferenceClient, n: int) -> list[dict]:
+def generate_batch(client: Groq, n: int) -> list[dict]:
     prompt = PROMPT_TEMPLATE.format(n=n, cats=", ".join(CATEGORIES))
     for attempt in range(3):
         try:
-            response = client.chat_completion(
+            response = client.chat.completions.create(
+                model=MODEL,
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=6000,
                 temperature=0.9,
@@ -84,15 +84,15 @@ def generate_batch(client: InferenceClient, n: int) -> list[dict]:
             return reviews
         except Exception as e:
             print(f"\n  Attempt {attempt + 1}/3 failed: {e}")
-            time.sleep(20)
+            time.sleep(15)
     return []
 
 
 def main():
-    if not HF_TOKEN:
-        raise SystemExit("HF_TOKEN not found in .env")
+    if not GROQ_API_KEY:
+        raise SystemExit("GROQ_API_KEY not found in .env — get a free key at console.groq.com")
 
-    client = InferenceClient(model=MODEL, token=HF_TOKEN)
+    client = Groq(api_key=GROQ_API_KEY)
     OUTPUT_FILE.parent.mkdir(exist_ok=True)
 
     existing = count_existing()
@@ -118,7 +118,7 @@ def main():
 
             total_written += len(reviews)
             print(f"✅  ({total_written:,} / {TOTAL:,} total)")
-            time.sleep(2)
+            time.sleep(3)  # stay well under rate limits
 
     print(f"\n✅ Done! {total_written:,} reviews saved to {OUTPUT_FILE}")
 
