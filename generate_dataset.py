@@ -25,7 +25,7 @@ TOTAL        = 10_000
 MODELS = [
     ("llama-3.3-70b-versatile", 20, 6000),   # 100K TPD  — best quality
     ("llama-3.1-8b-instant",    10, 3000),   # 500K TPD  — fast fallback
-    ("gemma2-9b-it",            10, 3000),   # 500K TPD  — second fallback
+    ("llama3-8b-8192",          10, 3000),   # separate quota — second fallback
 ]
 
 CATEGORIES = [
@@ -89,8 +89,13 @@ def generate_batch(client: Groq, n: int, model: str, max_tokens: int) -> list[di
             return reviews
         except Exception as e:
             msg = str(e)
-            if "429" in msg:
-                raise  # let caller switch model
+            if "429" in msg or "413" in msg:
+                if "per day" in msg or "TPD" in msg:
+                    raise  # daily limit — caller will switch model
+                # per-minute limit — wait and retry
+                print(f"\n  Rate limit (per minute) — waiting 60s...")
+                time.sleep(60)
+                continue
             print(f"\n  Attempt {attempt + 1}/3 failed: {e}")
             time.sleep(15)
     return []
@@ -109,8 +114,7 @@ def main():
         return
 
     remaining = TOTAL - existing
-    batches = (remaining + BATCH_SIZE - 1) // BATCH_SIZE
-    print(f"Generating {remaining:,} reviews in {batches} batches (resuming from {existing:,})...\n")
+    print(f"Generating {remaining:,} reviews (resuming from {existing:,})...\n")
 
     total_written = existing
     model_index = 0
