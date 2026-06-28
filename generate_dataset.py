@@ -20,8 +20,13 @@ load_dotenv()
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 OUTPUT_FILE  = Path("data_processing/car_rental_reviews.jsonl")
 TOTAL        = 10_000
-BATCH_SIZE   = 20    # Groq free tier: ~6k req/day, keep batches small
-MODEL        = "llama-3.3-70b-versatile"
+BATCH_SIZE   = 20    # Groq free tier: keep batches small
+# Models tried in order — falls back when daily token limit is hit
+MODELS = [
+    "llama-3.3-70b-versatile",   # 100K TPD  — best quality
+    "llama-3.1-8b-instant",      # 500K TPD  — fast fallback
+    "gemma2-9b-it",              # 500K TPD  — second fallback
+]
 
 CATEGORIES = [
     "Cleanliness",
@@ -66,12 +71,12 @@ def count_existing() -> int:
         return sum(1 for _ in f)
 
 
-def generate_batch(client: Groq, n: int) -> list[dict]:
+def generate_batch(client: Groq, n: int, model: str) -> list[dict]:
     prompt = PROMPT_TEMPLATE.format(n=n, cats=", ".join(CATEGORIES))
     for attempt in range(3):
         try:
             response = client.chat.completions.create(
-                model=MODEL,
+                model=model,
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=6000,
                 temperature=0.9,
@@ -83,6 +88,9 @@ def generate_batch(client: Groq, n: int) -> list[dict]:
                 raise ValueError(f"Only got {len(reviews)} reviews, expected ~{n}")
             return reviews
         except Exception as e:
+            msg = str(e)
+            if "rate_limit_exceeded" in msg and "tokens per day" in msg:
+                raise  # let caller switch model
             print(f"\n  Attempt {attempt + 1}/3 failed: {e}")
             time.sleep(15)
     return []
@@ -105,12 +113,26 @@ def main():
     print(f"Generating {remaining:,} reviews in {batches} batches (resuming from {existing:,})...\n")
 
     total_written = existing
+    model_index = 0
+    current_model = MODELS[model_index]
+    print(f"Using model: {current_model}\n")
+
     with open(OUTPUT_FILE, "a", encoding="utf-8") as f:
         for i in range(batches):
             size = min(BATCH_SIZE, TOTAL - total_written)
-            print(f"  Batch {i + 1}/{batches} ({size} reviews)...", end=" ", flush=True)
+            print(f"  Batch {i + 1}/{batches} ({size} reviews) [{current_model}]...", end=" ", flush=True)
 
-            reviews = generate_batch(client, size)
+            try:
+                reviews = generate_batch(client, size, current_model)
+            except Exception as e:
+                if "tokens per day" in str(e) and model_index + 1 < len(MODELS):
+                    model_index += 1
+                    current_model = MODELS[model_index]
+                    print(f"\n  Daily limit hit — switching to {current_model}")
+                    reviews = generate_batch(client, size, current_model)
+                else:
+                    print(f"\n  Failed: {e}")
+                    reviews = []
 
             for r in reviews:
                 f.write(json.dumps(r, ensure_ascii=False) + "\n")
@@ -118,7 +140,7 @@ def main():
 
             total_written += len(reviews)
             print(f"✅  ({total_written:,} / {TOTAL:,} total)")
-            time.sleep(3)  # stay well under rate limits
+            time.sleep(3)
 
     print(f"\n✅ Done! {total_written:,} reviews saved to {OUTPUT_FILE}")
 
