@@ -24,8 +24,8 @@ TOTAL        = 10_000
 # Smaller models have tighter per-request token limits on the free tier
 MODELS = [
     ("llama-3.3-70b-versatile", 20, 6000),   # 100K TPD  — best quality
-    ("llama-3.1-8b-instant",    10, 3000),   # 500K TPD  — fast fallback
-    ("llama3-8b-8192",          10, 3000),   # separate quota — second fallback
+    ("llama-3.1-8b-instant",    10, 3000),   # 500K TPD  — fallback
+    ("openai/gpt-oss-20b",      10, 3000),   # separate quota — second fallback
 ]
 
 CATEGORIES = [
@@ -96,6 +96,8 @@ def generate_batch(client: Groq, n: int, model: str, max_tokens: int) -> list[di
                 print(f"\n  Rate limit (per minute) — waiting 60s...")
                 time.sleep(60)
                 continue
+            if "decommissioned" in str(e):
+                raise  # no point retrying — caller will switch model
             print(f"\n  Attempt {attempt + 1}/3 failed: {e}")
             time.sleep(15)
     return []
@@ -131,10 +133,11 @@ def main():
             try:
                 reviews = generate_batch(client, size, current_model, max_tokens)
             except Exception as e:
-                if "429" in str(e) and model_index + 1 < len(MODELS):
+                msg = str(e)
+                if ("429" in msg or "decommissioned" in msg) and model_index + 1 < len(MODELS):
                     model_index += 1
                     current_model, batch_size, max_tokens = MODELS[model_index]
-                    print(f"\n  Limit hit — switching to {current_model}")
+                    print(f"\n  Switching to {current_model}")
                     reviews = generate_batch(client, size, current_model, max_tokens)
                 else:
                     print(f"\n  Failed: {e}")
