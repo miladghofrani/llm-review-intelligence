@@ -20,12 +20,12 @@ load_dotenv()
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 OUTPUT_FILE  = Path("data_processing/car_rental_reviews.jsonl")
 TOTAL        = 10_000
-BATCH_SIZE   = 20    # Groq free tier: keep batches small
-# Models tried in order — falls back when daily token limit is hit
+# Per-model settings: (batch_size, max_tokens)
+# Smaller models have tighter per-request token limits on the free tier
 MODELS = [
-    "llama-3.3-70b-versatile",   # 100K TPD  — best quality
-    "llama-3.1-8b-instant",      # 500K TPD  — fast fallback
-    "gemma2-9b-it",              # 500K TPD  — second fallback
+    ("llama-3.3-70b-versatile", 20, 6000),   # 100K TPD  — best quality
+    ("llama-3.1-8b-instant",    10, 3000),   # 500K TPD  — fast fallback
+    ("gemma2-9b-it",            10, 3000),   # 500K TPD  — second fallback
 ]
 
 CATEGORIES = [
@@ -71,14 +71,14 @@ def count_existing() -> int:
         return sum(1 for _ in f)
 
 
-def generate_batch(client: Groq, n: int, model: str) -> list[dict]:
+def generate_batch(client: Groq, n: int, model: str, max_tokens: int) -> list[dict]:
     prompt = PROMPT_TEMPLATE.format(n=n, cats=", ".join(CATEGORIES))
     for attempt in range(3):
         try:
             response = client.chat.completions.create(
                 model=model,
                 messages=[{"role": "user", "content": prompt}],
-                max_tokens=6000,
+                max_tokens=max_tokens,
                 temperature=0.9,
             )
             text = response.choices[0].message.content
@@ -89,7 +89,7 @@ def generate_batch(client: Groq, n: int, model: str) -> list[dict]:
             return reviews
         except Exception as e:
             msg = str(e)
-            if "rate_limit_exceeded" in msg and "tokens per day" in msg:
+            if "429" in msg:
                 raise  # let caller switch model
             print(f"\n  Attempt {attempt + 1}/3 failed: {e}")
             time.sleep(15)
@@ -114,22 +114,24 @@ def main():
 
     total_written = existing
     model_index = 0
-    current_model = MODELS[model_index]
+    current_model, batch_size, max_tokens = MODELS[model_index]
     print(f"Using model: {current_model}\n")
 
     with open(OUTPUT_FILE, "a", encoding="utf-8") as f:
-        for i in range(batches):
-            size = min(BATCH_SIZE, TOTAL - total_written)
-            print(f"  Batch {i + 1}/{batches} ({size} reviews) [{current_model}]...", end=" ", flush=True)
+        i = 0
+        while total_written < TOTAL:
+            size = min(batch_size, TOTAL - total_written)
+            i += 1
+            print(f"  Batch {i} ({size} reviews) [{current_model}]...", end=" ", flush=True)
 
             try:
-                reviews = generate_batch(client, size, current_model)
+                reviews = generate_batch(client, size, current_model, max_tokens)
             except Exception as e:
-                if "tokens per day" in str(e) and model_index + 1 < len(MODELS):
+                if "429" in str(e) and model_index + 1 < len(MODELS):
                     model_index += 1
-                    current_model = MODELS[model_index]
-                    print(f"\n  Daily limit hit — switching to {current_model}")
-                    reviews = generate_batch(client, size, current_model)
+                    current_model, batch_size, max_tokens = MODELS[model_index]
+                    print(f"\n  Limit hit — switching to {current_model}")
+                    reviews = generate_batch(client, size, current_model, max_tokens)
                 else:
                     print(f"\n  Failed: {e}")
                     reviews = []
