@@ -17,13 +17,6 @@ start:
 stop:
 	docker compose down
 
-# Run the main Python script (assuming main.py is your entrypoint)
-run:
-	docker compose run --rm llm-app python scripts/train.py
-
-serve:
-	docker compose up
-
 console:
 	docker exec -it company_llm_container bash
 
