@@ -1,5 +1,5 @@
 from contextlib import asynccontextmanager
-from typing import List
+from typing import List, Optional
 
 from fastapi import FastAPI
 from pydantic import BaseModel
@@ -10,9 +10,101 @@ from .model_loader import load_llm_model, load_tokenizer
 from .peft_trainer import load_saved_peft_model
 from .translator import Translator
 
-# ── State shared across requests ───────────────────────────────────────────
 _state: dict = {}
 
+
+# ── Helpers ────────────────────────────────────────────────────────────────────
+
+def _parse_categories(raw: str) -> List[str]:
+    """Split model output and keep only recognised category names."""
+    valid = set(CATEGORIES)
+    return [c.strip() for c in raw.split(",") if c.strip() in valid]
+
+
+def _parse_sentiment(raw: str) -> str:
+    t = raw.strip().lower()
+    if "positive" in t:
+        return "positive"
+    if "negative" in t:
+        return "negative"
+    return "mixed"
+
+
+def _keyword_flags(text: str) -> dict:
+    t = text.lower()
+    return {
+        "has_damage_claim": any(k in t for k in [
+            "damage claim", "damage charge", "scratch", "dent", "damage report",
+        ]),
+        "has_hidden_fees": any(k in t for k in [
+            "hidden fee", "extra charge", "unexpected charge", "surcharge",
+            "undisclosed", "administration fee", "additional charge",
+        ]),
+        "has_upselling": any(k in t for k in [
+            "insurance", "upsell", "pressure", "pushed", "forced",
+            "declined", "mandatory upgrade",
+        ]),
+    }
+
+
+# ── Models ─────────────────────────────────────────────────────────────────────
+
+class ReviewRequest(BaseModel):
+    review: str
+    # Floyt metadata — passed through to the Elasticsearch output as-is.
+    # All fields are optional so the endpoint also works without Floyt context.
+    database_id: Optional[int] = None
+    provider: Optional[str] = None       # intermediary, e.g. "BSPAuto"
+    provider_id: Optional[str] = None
+    renter: Optional[str] = None         # on-site company, e.g. "Dollar"
+    location: Optional[str] = None       # pickup city
+    departure: Optional[str] = None      # airport / station code
+    country_code: Optional[str] = None
+    aggregate_rating: Optional[float] = None
+    renter_rating: Optional[float] = None
+
+
+class ElasticsearchDoc(BaseModel):
+    """
+    Ready-to-index document that merges the original Floyt metadata with
+    AI-generated enrichments. Store this document to enable filtering and
+    aggregations across providers, sentiment, issue types, and locations.
+    """
+    # ── Floyt passthrough ──
+    database_id: Optional[int]
+    provider: Optional[str]
+    provider_id: Optional[str]
+    renter: Optional[str]
+    location: Optional[str]
+    departure: Optional[str]
+    country_code: Optional[str]
+    aggregate_rating: Optional[float]
+    renter_rating: Optional[float]
+    # ── AI-generated ──
+    language: str                   # original language code (de, fr, en, …)
+    sentiment: str                  # positive | negative | mixed
+    primary_category: str           # top category for quick filtering
+    categories: List[str]
+    has_damage_claim: bool
+    has_hidden_fees: bool
+    has_upselling: bool
+
+
+class ReviewAnalysis(BaseModel):
+    original_review: str
+    detected_language: str
+    english_translation: Optional[str]  # null when review was already in English
+    summary: str
+    sentiment: str
+    categories: List[str]
+    elasticsearch: ElasticsearchDoc
+
+
+class BatchReviewRequest(BaseModel):
+    reviews: List[ReviewRequest]
+
+
+# ── App ────────────────────────────────────────────────────────────────────────
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -36,106 +128,144 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Car Rental Review Inference", lifespan=lifespan)
 
 
-class ReviewRequest(BaseModel):
-    review: str
+# ── Inference ──────────────────────────────────────────────────────────────────
 
-
-class ReviewResponse(BaseModel):
-    review: str
-    detected_language: str
-    summary: str
-    categories: str
-
-
-class BatchReviewRequest(BaseModel):
-    reviews: List[str]
-
-
-def _run_inference(review: str) -> ReviewResponse:
-    tokenizer = _state["tokenizer"]
-    model = _state["model"]
-    device = _state["device"]
-    categories_str = _state["categories_str"]
-
-    english_review, detected_language = _state["translator"].to_english(review)
-
-    summary_prompt = f"Summarize the following car rental review.\n\n{english_review}\n\nSummary:"
-    summary_inputs = tokenizer(summary_prompt, return_tensors="pt", truncation=True, max_length=512).to(device)
-    summary_tokens = model.generate(
-        input_ids=summary_inputs["input_ids"],
-        max_new_tokens=60, do_sample=False,
-        repetition_penalty=1.3, no_repeat_ngram_size=3,
-    )[0]
-    summary = tokenizer.decode(summary_tokens, skip_special_tokens=True)
-
-    category_prompt = (
-        f"Classify this car rental review into one or more of these categories: "
-        f"{categories_str}.\n\nReview: {english_review}\n\nCategories:"
+def _build_analysis(req: ReviewRequest, english_review: str, detected_language: str,
+                    summary: str, categories: List[str], sentiment: str) -> ReviewAnalysis:
+    flags = _keyword_flags(english_review)
+    return ReviewAnalysis(
+        original_review=req.review,
+        detected_language=detected_language,
+        english_translation=english_review if detected_language != "en" else None,
+        summary=summary,
+        sentiment=sentiment,
+        categories=categories,
+        elasticsearch=ElasticsearchDoc(
+            database_id=req.database_id,
+            provider=req.provider,
+            provider_id=req.provider_id,
+            renter=req.renter,
+            location=req.location,
+            departure=req.departure,
+            country_code=req.country_code,
+            aggregate_rating=req.aggregate_rating,
+            renter_rating=req.renter_rating,
+            language=detected_language,
+            sentiment=sentiment,
+            primary_category=categories[0] if categories else "Staff & Communication",
+            categories=categories,
+            **flags,
+        ),
     )
-    category_inputs = tokenizer(category_prompt, return_tensors="pt", truncation=True, max_length=512).to(device)
-    category_tokens = model.generate(
-        input_ids=category_inputs["input_ids"],
-        max_new_tokens=40, do_sample=False,
-        repetition_penalty=1.3, no_repeat_ngram_size=3,
-    )[0]
-    categories = tokenizer.decode(category_tokens, skip_special_tokens=True)
-
-    return ReviewResponse(review=review, detected_language=detected_language, summary=summary, categories=categories)
 
 
-def _run_batch_inference(reviews: List[str]) -> List[ReviewResponse]:
-    tokenizer = _state["tokenizer"]
-    model = _state["model"]
-    device = _state["device"]
+def _analyse(req: ReviewRequest) -> ReviewAnalysis:
+    tokenizer      = _state["tokenizer"]
+    model          = _state["model"]
+    device         = _state["device"]
     categories_str = _state["categories_str"]
 
-    translations = _state["translator"].batch_to_english(reviews)
-    english_reviews = [t[0] for t in translations]
+    english_review, detected_language = _state["translator"].to_english(req.review)
+
+    def _generate(prompt: str, max_new_tokens: int, **kwargs) -> str:
+        inputs = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=512).to(device)
+        tokens = model.generate(
+            input_ids=inputs["input_ids"],
+            max_new_tokens=max_new_tokens,
+            do_sample=False,
+            **kwargs,
+        )[0]
+        return tokenizer.decode(tokens, skip_special_tokens=True)
+
+    summary    = _generate(
+        f"Summarize the following car rental review.\n\n{english_review}\n\nSummary:",
+        max_new_tokens=60, repetition_penalty=1.3, no_repeat_ngram_size=3,
+    )
+    categories = _parse_categories(_generate(
+        f"Classify this car rental review into one or more of these categories: "
+        f"{categories_str}.\n\nReview: {english_review}\n\nCategories:",
+        max_new_tokens=40, repetition_penalty=1.3, no_repeat_ngram_size=3,
+    ))
+    sentiment  = _parse_sentiment(_generate(
+        f"What is the overall sentiment of this car rental review? "
+        f"Answer with exactly one word: positive, negative, or mixed.\n\n"
+        f"Review: {english_review}\n\nSentiment:",
+        max_new_tokens=5,
+    ))
+
+    return _build_analysis(req, english_review, detected_language, summary, categories, sentiment)
+
+
+def _analyse_batch(requests: List[ReviewRequest]) -> List[ReviewAnalysis]:
+    tokenizer      = _state["tokenizer"]
+    model          = _state["model"]
+    device         = _state["device"]
+    categories_str = _state["categories_str"]
+
+    translations       = _state["translator"].batch_to_english([r.review for r in requests])
+    english_reviews    = [t[0] for t in translations]
     detected_languages = [t[1] for t in translations]
 
-    summary_prompts = [
-        f"Summarize the following car rental review.\n\n{r}\n\nSummary:"
-        for r in english_reviews
-    ]
-    category_prompts = [
-        f"Classify this car rental review into one or more of these categories: "
-        f"{categories_str}.\n\nReview: {r}\n\nCategories:"
-        for r in english_reviews
-    ]
+    def _batch_generate(prompts: List[str], max_new_tokens: int, **kwargs) -> List[str]:
+        inputs = tokenizer(
+            prompts, return_tensors="pt", padding=True,
+            truncation=True, max_length=512,
+        ).to(device)
+        tokens = model.generate(
+            input_ids=inputs["input_ids"],
+            attention_mask=inputs["attention_mask"],
+            max_new_tokens=max_new_tokens,
+            do_sample=False,
+            **kwargs,
+        )
+        return tokenizer.batch_decode(tokens, skip_special_tokens=True)
 
-    # One generate() call per task type instead of one per review
-    summary_inputs = tokenizer(summary_prompts, return_tensors="pt", padding=True, truncation=True, max_length=512).to(device)
-    summary_tokens = model.generate(
-        input_ids=summary_inputs["input_ids"],
-        attention_mask=summary_inputs["attention_mask"],
-        max_new_tokens=60, do_sample=False,
-        repetition_penalty=1.3, no_repeat_ngram_size=3,
+    summaries      = _batch_generate(
+        [f"Summarize the following car rental review.\n\n{r}\n\nSummary:" for r in english_reviews],
+        max_new_tokens=60, repetition_penalty=1.3, no_repeat_ngram_size=3,
     )
-    summaries = tokenizer.batch_decode(summary_tokens, skip_special_tokens=True)
-
-    category_inputs = tokenizer(category_prompts, return_tensors="pt", padding=True, truncation=True, max_length=512).to(device)
-    category_tokens = model.generate(
-        input_ids=category_inputs["input_ids"],
-        attention_mask=category_inputs["attention_mask"],
-        max_new_tokens=40, do_sample=False,
-        repetition_penalty=1.3, no_repeat_ngram_size=3,
+    categories_raw = _batch_generate(
+        [
+            f"Classify this car rental review into one or more of these categories: "
+            f"{categories_str}.\n\nReview: {r}\n\nCategories:"
+            for r in english_reviews
+        ],
+        max_new_tokens=40, repetition_penalty=1.3, no_repeat_ngram_size=3,
     )
-    categories = tokenizer.batch_decode(category_tokens, skip_special_tokens=True)
+    sentiments_raw = _batch_generate(
+        [
+            f"What is the overall sentiment of this car rental review? "
+            f"Answer with exactly one word: positive, negative, or mixed.\n\n"
+            f"Review: {r}\n\nSentiment:"
+            for r in english_reviews
+        ],
+        max_new_tokens=5,
+    )
 
     return [
-        ReviewResponse(review=review, detected_language=lang, summary=summary, categories=cats)
-        for review, lang, summary, cats in zip(reviews, detected_languages, summaries, categories)
+        _build_analysis(
+            req, eng, lang,
+            summary,
+            _parse_categories(cats_str),
+            _parse_sentiment(sent_raw),
+        )
+        for req, eng, lang, summary, cats_str, sent_raw in zip(
+            requests, english_reviews, detected_languages,
+            summaries, categories_raw, sentiments_raw,
+        )
     ]
 
 
-@app.post("/infer", response_model=ReviewResponse)
+# ── Routes ─────────────────────────────────────────────────────────────────────
+
+@app.post("/infer", response_model=ReviewAnalysis)
 def infer(req: ReviewRequest):
-    return _run_inference(req.review)
+    return _analyse(req)
 
 
-@app.post("/infer/batch", response_model=List[ReviewResponse])
+@app.post("/infer/batch", response_model=List[ReviewAnalysis])
 def infer_batch(req: BatchReviewRequest):
-    return _run_batch_inference(req.reviews)
+    return _analyse_batch(req.reviews)
 
 
 @app.get("/health")
