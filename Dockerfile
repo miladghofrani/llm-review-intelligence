@@ -22,4 +22,4 @@ RUN pip install --no-cache-dir --upgrade pip && \
 COPY . .
 
 # Load model once at startup and serve requests
-CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8742"]
+CMD ["uvicorn", "app.server:app", "--host", "0.0.0.0", "--port", "8742"]

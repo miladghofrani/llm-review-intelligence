@@ -5,9 +5,9 @@ import torch
 from transformers import GenerationConfig
 
 from config import ADAPTER_PATH, MODEL_NAME
-from device_utils import get_device
-from model_loader import load_llm_model, load_tokenizer
-from peft_trainer import load_saved_peft_model
+from app.device_utils import get_device
+from app.model_loader import load_llm_model, load_tokenizer
+from app.peft_trainer import load_saved_peft_model
 
 
 class RougeEvaluator:

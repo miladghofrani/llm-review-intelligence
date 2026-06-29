@@ -1,9 +1,9 @@
 from config import ADAPTER_PATH, CATEGORIES
 from data_processing.loader import load_review_dataset, build_multitask_dataset
 from data_processing.preprocessor import tokenize_dataset
-from device_utils import get_device
-from model_loader import load_llm_model, load_tokenizer, print_number_of_trainable_model_parameters
-from peft_trainer import load_saved_peft_model, setup_peft_lora_model, train_and_save_peft_model
+from app.device_utils import get_device
+from app.model_loader import load_llm_model, load_tokenizer, print_number_of_trainable_model_parameters
+from app.peft_trainer import load_saved_peft_model, setup_peft_lora_model, train_and_save_peft_model
 
 
 def train():

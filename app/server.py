@@ -5,10 +5,10 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 
 from config import ADAPTER_PATH, CATEGORIES
-from device_utils import get_device
-from model_loader import load_llm_model, load_tokenizer
-from peft_trainer import load_saved_peft_model
-from translator import Translator
+from .device_utils import get_device
+from .model_loader import load_llm_model, load_tokenizer
+from .peft_trainer import load_saved_peft_model
+from .translator import Translator
 
 # ── State shared across requests ───────────────────────────────────────────
 _state: dict = {}

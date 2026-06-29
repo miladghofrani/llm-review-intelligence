@@ -19,7 +19,7 @@ stop:
 
 # Run the main Python script (assuming main.py is your entrypoint)
 run:
-	docker compose run --rm llm-app python main.py
+	docker compose run --rm llm-app python scripts/train.py
 
 serve:
 	docker compose up

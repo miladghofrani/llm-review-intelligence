@@ -10,7 +10,7 @@ from config import (
     MAX_STEPS,
     NUM_EPOCHS,
 )
-from model_loader import print_number_of_trainable_model_parameters
+from .model_loader import print_number_of_trainable_model_parameters
 from peft import LoraConfig, get_peft_model, TaskType, PeftModel
 from transformers import TrainingArguments, Trainer
 
