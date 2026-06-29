@@ -46,8 +46,9 @@ def infer(review: str, adapter_path: str = ADAPTER_PATH):
     summary_tokens = model.generate(
         input_ids=summary_inputs["input_ids"],
         max_new_tokens=60,
-        temperature=0.5,
-        do_sample=True,
+        do_sample=False,
+        repetition_penalty=1.3,
+        no_repeat_ngram_size=3,
     )[0]
     summary = tokenizer.decode(summary_tokens, skip_special_tokens=True)
 
@@ -62,6 +63,8 @@ def infer(review: str, adapter_path: str = ADAPTER_PATH):
         input_ids=category_inputs["input_ids"],
         max_new_tokens=40,
         do_sample=False,
+        repetition_penalty=1.3,
+        no_repeat_ngram_size=3,
     )[0]
     categories = tokenizer.decode(category_tokens, skip_special_tokens=True)
 

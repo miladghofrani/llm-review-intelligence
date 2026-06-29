@@ -64,7 +64,7 @@ def label_review(text: str) -> list:
         for category, keywords in CATEGORY_KEYWORDS.items()
         if any(keyword in text_lower for keyword in keywords)
     ]
-    return matched if matched else ["Customer Service"]
+    return matched if matched else ["Staff & Communication"]
 
 
 def format_labels(labels: list) -> str:

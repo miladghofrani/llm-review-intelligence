@@ -23,9 +23,9 @@ TOTAL        = 10_000
 # Per-model settings: (batch_size, max_tokens)
 # Smaller models have tighter per-request token limits on the free tier
 MODELS = [
-    ("llama-3.3-70b-versatile", 20, 6000),   # 100K TPD  — best quality
-    ("llama-3.1-8b-instant",    10, 3000),   # 500K TPD  — fallback
-    ("openai/gpt-oss-20b",      10, 3000),   # separate quota — second fallback
+    ("llama-3.3-70b-versatile",              20, 6000),
+    ("llama-3.1-8b-instant",                 10, 3000),
+    ("meta-llama/llama-4-scout-17b-16e-instruct", 10, 3000),
 ]
 
 CATEGORIES = [

@@ -1,6 +1,8 @@
 import torch
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
+from config import MODEL_NAME
+
 def print_number_of_trainable_model_parameters(model):
     trainable_model_params = 0
     all_model_params = 0
@@ -20,16 +22,16 @@ def print_number_of_trainable_model_parameters(model):
     )
     return report
 
-def load_tokenizer(model_name='google/flan-t5-base'):
+def load_tokenizer(model_name=MODEL_NAME):
     print("\n🔤 Loading Tokenizer...")
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     print(f"✅ Tokenizer loaded for {model_name}.")
     return tokenizer
 
-def load_llm_model(device, model_name='google/flan-t5-base'):
+def load_llm_model(device, model_name=MODEL_NAME):
     print("\n🧠 Loading the LLM...")
     target_dtype = torch.bfloat16 if device == "cuda" else torch.float32
-    model = AutoModelForSeq2SeqLM.from_pretrained(model_name, dtype=target_dtype).to(device)
+    model = AutoModelForSeq2SeqLM.from_pretrained(model_name, torch_dtype=target_dtype).to(device)
     print(f"✅ {model_name} loaded using {target_dtype}.")
     return model
 

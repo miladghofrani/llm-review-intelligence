@@ -5,3 +5,6 @@ __pycache__/
 .DS_Store
 peft-training-run-*/
 checkpoint-local/
+peft-dialogue-summary-checkpoint-local/
+data_processing/car_rental_reviews.jsonl
+.ipynb_checkpoints/
