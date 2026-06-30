@@ -12,7 +12,7 @@ from config import (
 )
 from .model_loader import print_number_of_trainable_model_parameters
 from peft import LoraConfig, get_peft_model, TaskType, PeftModel
-from transformers import TrainingArguments, Trainer
+from transformers import TrainingArguments, Trainer, DataCollatorForSeq2Seq
 
 
 def setup_peft_lora_model(original_model):
@@ -49,10 +49,16 @@ def train_and_save_peft_model(peft_model, tokenizer, tokenized_datasets):
     mode = f"max_steps={MAX_STEPS}" if MAX_STEPS is not None else f"{NUM_EPOCHS} full epoch(s)"
     print(f"\n🏋️  Starting PEFT training ({mode})...")
 
+    # DataCollatorForSeq2Seq pads each batch to its longest sequence only,
+    # instead of padding everything to max_length=512. Noticeably faster on
+    # datasets where most reviews are shorter than the maximum.
+    collator = DataCollatorForSeq2Seq(tokenizer, model=peft_model, padding=True)
+
     trainer = Trainer(
         model=peft_model,
         args=training_args,
         train_dataset=tokenized_datasets["train"],
+        data_collator=collator,
     )
 
     trainer.train()

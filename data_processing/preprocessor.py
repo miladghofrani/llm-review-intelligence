@@ -10,17 +10,17 @@ def tokenize_dataset(tokenizer, dataset):
     def tokenize(batch):
         model_inputs = tokenizer(
             batch["input"],
-            padding="max_length",
             truncation=True,
             max_length=512,
         )
         labels = tokenizer(
             batch["output"],
-            padding="max_length",
             truncation=True,
             max_length=128,
         )
-        # Replace padding in labels with -100 so the loss ignores them
+        # Replace padding in labels with -100 so the loss ignores them.
+        # No padding here — DataCollatorForSeq2Seq pads dynamically per batch,
+        # which is faster than padding everything to max_length upfront.
         model_inputs["labels"] = [
             [(t if t != pad_id else -100) for t in label]
             for label in labels["input_ids"]
