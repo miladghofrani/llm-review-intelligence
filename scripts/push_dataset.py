@@ -6,8 +6,11 @@ Usage:
     python3 push_dataset.py
 """
 
-import os
+import sys
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+import os
 
 from datasets import load_dataset
 from dotenv import load_dotenv

@@ -1,3 +1,7 @@
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 from config import ADAPTER_PATH, CATEGORIES
 from data_processing.loader import load_review_dataset, build_multitask_dataset
 from data_processing.preprocessor import tokenize_dataset

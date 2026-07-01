@@ -6,6 +6,10 @@ Usage:
     python3 generate_dataset.py
 """
 
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 import json
 import os
 import time
