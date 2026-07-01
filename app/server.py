@@ -30,20 +30,11 @@ def _parse_sentiment(raw: str) -> str:
     return "mixed"
 
 
-def _keyword_flags(text: str) -> dict:
-    t = text.lower()
+def _category_flags(categories: List[str]) -> dict:
     return {
-        "has_damage_claim": any(k in t for k in [
-            "damage claim", "damage charge", "scratch", "dent", "damage report",
-        ]),
-        "has_hidden_fees": any(k in t for k in [
-            "hidden fee", "extra charge", "unexpected charge", "surcharge",
-            "undisclosed", "administration fee", "additional charge",
-        ]),
-        "has_upselling": any(k in t for k in [
-            "insurance", "upsell", "pressure", "pushed", "forced",
-            "declined", "mandatory upgrade",
-        ]),
+        "has_damage_claim": "Vehicle Condition" in categories,
+        "has_hidden_fees":  "Hidden Fees & Billing" in categories,
+        "has_upselling":    "Insurance & Upselling" in categories,
     }
 
 
@@ -132,7 +123,7 @@ app = FastAPI(title="Car Rental Review Inference", lifespan=lifespan)
 
 def _build_analysis(req: ReviewRequest, english_review: str, detected_language: str,
                     summary: str, categories: List[str], sentiment: str) -> ReviewAnalysis:
-    flags = _keyword_flags(english_review)
+    flags = _category_flags(categories)
     return ReviewAnalysis(
         original_review=req.review,
         detected_language=detected_language,

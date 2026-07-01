@@ -37,21 +37,24 @@ def load_review_dataset():
 
 def build_multitask_dataset(dataset):
     """
-    Converts raw reviews into two training examples per review:
+    Converts raw reviews into three training examples per review:
     1. Summarization  — input: full review  /  output: summary
     2. Classification — input: full review  /  output: comma-separated categories
+    3. Sentiment      — input: full review  /  output: positive | negative | mixed
 
     Returns a DatasetDict with 'train' and 'test' splits (90/10).
     """
     print(f"\n⚙️  Building multi-task examples...")
 
     categories_str = ", ".join(CATEGORIES)
+    valid_sentiments = {"positive", "negative", "mixed"}
     inputs, outputs = [], []
 
     for row in dataset["train"]:
         body       = (row.get("review_body") or "").strip()
         summary    = (row.get("summary") or "").strip()
         categories = row.get("categories") or []
+        sentiment  = (row.get("sentiment") or "").strip().lower()
 
         if not body or not summary:
             continue
@@ -64,6 +67,14 @@ def build_multitask_dataset(dataset):
             f"{categories_str}.\n\nReview: {body}\n\nCategories:"
         )
         outputs.append(", ".join(categories) if categories else "Staff & Communication")
+
+        if sentiment in valid_sentiments:
+            inputs.append(
+                f"What is the overall sentiment of this car rental review? "
+                f"Answer with exactly one word: positive, negative, or mixed.\n\n"
+                f"Review: {body}\n\nSentiment:"
+            )
+            outputs.append(sentiment)
 
     full = Dataset.from_dict({"input": inputs, "output": outputs})
     split = full.train_test_split(test_size=0.1, seed=42)
