@@ -4,9 +4,11 @@ from typing import List, Optional
 from fastapi import FastAPI
 from pydantic import BaseModel
 
+import torch
+
 from config import ADAPTER_PATH, CATEGORIES
 from .device_utils import get_device
-from .model_loader import load_llm_model, load_tokenizer
+from .model_loader import load_llm_model, load_tokenizer, load_mbart_model, load_mbart_tokenizer
 from .peft_trainer import load_saved_peft_model
 from .translator import Translator
 
@@ -100,16 +102,24 @@ class BatchReviewRequest(BaseModel):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     device = get_device()
-    tokenizer = load_tokenizer()
+
+    # flan-t5-large — categories + sentiment
+    tokenizer  = load_tokenizer()
     base_model = load_llm_model(device)
-    model = load_saved_peft_model(device, base_model, ADAPTER_PATH)
+    model      = load_saved_peft_model(device, base_model, ADAPTER_PATH)
     model.eval()
 
-    _state["device"] = device
-    _state["tokenizer"] = tokenizer
-    _state["model"] = model
-    _state["categories_str"] = ", ".join(CATEGORIES)
-    _state["translator"] = Translator()
+    # mBART — summarization
+    mbart_tokenizer = load_mbart_tokenizer()
+    mbart_model     = load_mbart_model(device)
+
+    _state["device"]          = device
+    _state["tokenizer"]       = tokenizer
+    _state["model"]           = model
+    _state["categories_str"]  = ", ".join(CATEGORIES)
+    _state["translator"]      = Translator()
+    _state["mbart_tokenizer"] = mbart_tokenizer
+    _state["mbart_model"]     = mbart_model
 
     print("\n✅ Server ready — waiting for requests.\n")
     yield
@@ -150,6 +160,39 @@ def _build_analysis(req: ReviewRequest, english_review: str, detected_language: 
     )
 
 
+def _mbart_summarize(review: str) -> str:
+    tokenizer = _state["mbart_tokenizer"]
+    model     = _state["mbart_model"]
+    device    = _state["device"]
+    tokenizer.src_lang = "de_DE"
+    inputs = tokenizer(review, return_tensors="pt", truncation=True, max_length=512).to(device)
+    with torch.no_grad():
+        tokens = model.generate(
+            **inputs,
+            forced_bos_token_id=tokenizer.lang_code_to_id["en_XX"],
+            max_new_tokens=80,
+            num_beams=2,
+        )
+    return tokenizer.decode(tokens[0], skip_special_tokens=True)
+
+
+def _mbart_summarize_batch(reviews: List[str]) -> List[str]:
+    tokenizer = _state["mbart_tokenizer"]
+    model     = _state["mbart_model"]
+    device    = _state["device"]
+    tokenizer.src_lang = "de_DE"
+    inputs = tokenizer(
+        reviews, return_tensors="pt", padding=True, truncation=True, max_length=512
+    ).to(device)
+    with torch.no_grad():
+        tokens = model.generate(
+            **inputs,
+            forced_bos_token_id=tokenizer.lang_code_to_id["en_XX"],
+            max_new_tokens=80,
+        )
+    return tokenizer.batch_decode(tokens, skip_special_tokens=True)
+
+
 def _analyse(req: ReviewRequest) -> ReviewAnalysis:
     tokenizer      = _state["tokenizer"]
     model          = _state["model"]
@@ -168,13 +211,7 @@ def _analyse(req: ReviewRequest) -> ReviewAnalysis:
         )[0]
         return tokenizer.decode(tokens, skip_special_tokens=True)
 
-    # Use the original review for model inference — the model was trained on
-    # DE/FR → EN summary directly, so feeding translated text hurts quality.
-    # DeepL translation is kept only for the english_translation response field.
-    summary    = _generate(
-        f"Summarize the following car rental review.\n\n{req.review}\n\nSummary:",
-        max_new_tokens=60, repetition_penalty=1.3, no_repeat_ngram_size=3,
-    )
+    summary    = _mbart_summarize(req.review)
     categories = _parse_categories(_generate(
         f"Classify this car rental review into one or more of these categories: "
         f"{categories_str}.\n\nReview: {req.review}\n\nCategories:",
@@ -215,11 +252,7 @@ def _analyse_batch(requests: List[ReviewRequest]) -> List[ReviewAnalysis]:
         )
         return tokenizer.batch_decode(tokens, skip_special_tokens=True)
 
-    # Use original reviews for model inference — trained on DE/FR → EN directly.
-    summaries      = _batch_generate(
-        [f"Summarize the following car rental review.\n\n{r}\n\nSummary:" for r in original_reviews],
-        max_new_tokens=60, repetition_penalty=1.3, no_repeat_ngram_size=3,
-    )
+    summaries      = _mbart_summarize_batch(original_reviews)
     categories_raw = _batch_generate(
         [
             f"Classify this car rental review into one or more of these categories: "
