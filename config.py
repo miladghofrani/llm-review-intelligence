@@ -1,8 +1,8 @@
 import os
 
 # Model
-MODEL_NAME = os.getenv("MODEL_NAME", "google/flan-t5-large")
-ADAPTER_PATH = os.getenv("ADAPTER_PATH", "miladghofrani/car-rental-peft-adapter-large")
+MODEL_NAME = os.getenv("MODEL_NAME", "google/flan-t5-xl")
+ADAPTER_PATH = os.getenv("ADAPTER_PATH", "miladghofrani/car-rental-peft-adapter-xl")
 
 # Training — set MAX_STEPS=0 (or unset) for full training, any positive int for dry run
 MAX_STEPS = int(os.getenv("MAX_STEPS", "0")) or None
