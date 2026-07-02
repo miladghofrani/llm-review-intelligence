@@ -168,19 +168,22 @@ def _analyse(req: ReviewRequest) -> ReviewAnalysis:
         )[0]
         return tokenizer.decode(tokens, skip_special_tokens=True)
 
+    # Use the original review for model inference — the model was trained on
+    # DE/FR → EN summary directly, so feeding translated text hurts quality.
+    # DeepL translation is kept only for the english_translation response field.
     summary    = _generate(
-        f"Summarize the following car rental review.\n\n{english_review}\n\nSummary:",
+        f"Summarize the following car rental review.\n\n{req.review}\n\nSummary:",
         max_new_tokens=60, repetition_penalty=1.3, no_repeat_ngram_size=3,
     )
     categories = _parse_categories(_generate(
         f"Classify this car rental review into one or more of these categories: "
-        f"{categories_str}.\n\nReview: {english_review}\n\nCategories:",
+        f"{categories_str}.\n\nReview: {req.review}\n\nCategories:",
         max_new_tokens=40, repetition_penalty=1.3, no_repeat_ngram_size=3,
     ))
     sentiment  = _parse_sentiment(_generate(
         f"What is the overall sentiment of this car rental review? "
         f"Answer with exactly one word: positive, negative, or mixed.\n\n"
-        f"Review: {english_review}\n\nSentiment:",
+        f"Review: {req.review}\n\nSentiment:",
         max_new_tokens=5,
     ))
 
@@ -196,6 +199,7 @@ def _analyse_batch(requests: List[ReviewRequest]) -> List[ReviewAnalysis]:
     translations       = _state["translator"].batch_to_english([r.review for r in requests])
     english_reviews    = [t[0] for t in translations]
     detected_languages = [t[1] for t in translations]
+    original_reviews   = [r.review for r in requests]
 
     def _batch_generate(prompts: List[str], max_new_tokens: int, **kwargs) -> List[str]:
         inputs = tokenizer(
@@ -211,15 +215,16 @@ def _analyse_batch(requests: List[ReviewRequest]) -> List[ReviewAnalysis]:
         )
         return tokenizer.batch_decode(tokens, skip_special_tokens=True)
 
+    # Use original reviews for model inference — trained on DE/FR → EN directly.
     summaries      = _batch_generate(
-        [f"Summarize the following car rental review.\n\n{r}\n\nSummary:" for r in english_reviews],
+        [f"Summarize the following car rental review.\n\n{r}\n\nSummary:" for r in original_reviews],
         max_new_tokens=60, repetition_penalty=1.3, no_repeat_ngram_size=3,
     )
     categories_raw = _batch_generate(
         [
             f"Classify this car rental review into one or more of these categories: "
             f"{categories_str}.\n\nReview: {r}\n\nCategories:"
-            for r in english_reviews
+            for r in original_reviews
         ],
         max_new_tokens=40, repetition_penalty=1.3, no_repeat_ngram_size=3,
     )
@@ -228,7 +233,7 @@ def _analyse_batch(requests: List[ReviewRequest]) -> List[ReviewAnalysis]:
             f"What is the overall sentiment of this car rental review? "
             f"Answer with exactly one word: positive, negative, or mixed.\n\n"
             f"Review: {r}\n\nSentiment:"
-            for r in english_reviews
+            for r in original_reviews
         ],
         max_new_tokens=5,
     )
