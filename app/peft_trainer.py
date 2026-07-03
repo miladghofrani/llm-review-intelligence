@@ -80,5 +80,13 @@ def load_saved_peft_model(device, base_model, adapter_path):
         is_trainable=False,
     ).to(device)
 
+    # flan-t5 ties shared.weight and lm_head.weight in the base model.
+    # PEFT with enable_input_require_grads() can accidentally save lm_head
+    # as a separate tensor in the adapter checkpoint, breaking generation.
+    # Re-tying here restores the correct behavior.
+    m = peft_model.base_model.model
+    if hasattr(m, "shared") and hasattr(m, "lm_head"):
+        m.lm_head.weight = m.shared.weight
+
     print("✅ Model ready for inference.")
     return peft_model
