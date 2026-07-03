@@ -215,8 +215,10 @@ def _analyse(req: ReviewRequest) -> ReviewAnalysis:
 
     summary    = _mbart_summarize(req.review)
     categories = _parse_categories(_generate(
-        f"Classify this car rental review into one or more of these categories: "
-        f"{categories_str}.\n\nReview: {req.review}\n\nCategories:",
+        f"Classify this car rental review into 1-3 of these categories: {categories_str}.\n"
+        f"Use 'Insurance & Upselling' if insurance or extra products were pushed or required.\n"
+        f"Use 'Hidden Fees & Billing' if unexpected charges or fees are mentioned.\n\n"
+        f"Review: {req.review}\n\nCategories:",
         max_new_tokens=40, repetition_penalty=1.3, no_repeat_ngram_size=3,
     ))
     sentiment  = _parse_sentiment(_generate(
@@ -257,8 +259,10 @@ def _analyse_batch(requests: List[ReviewRequest]) -> List[ReviewAnalysis]:
     summaries      = _mbart_summarize_batch(original_reviews)
     categories_raw = _batch_generate(
         [
-            f"Classify this car rental review into one or more of these categories: "
-            f"{categories_str}.\n\nReview: {r}\n\nCategories:"
+            f"Classify this car rental review into 1-3 of these categories: {categories_str}.\n"
+            f"Use 'Insurance & Upselling' if insurance or extra products were pushed or required.\n"
+            f"Use 'Hidden Fees & Billing' if unexpected charges or fees are mentioned.\n\n"
+            f"Review: {r}\n\nCategories:"
             for r in original_reviews
         ],
         max_new_tokens=40, repetition_penalty=1.3, no_repeat_ngram_size=3,
