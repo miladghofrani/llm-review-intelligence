@@ -50,6 +50,13 @@ def build_multitask_dataset(dataset):
     valid_sentiments = {"positive", "negative", "mixed"}
     inputs, outputs = [], []
 
+    # Rare categories to oversample so the model sees them more often.
+    # Insurance & Upselling appears ~10% of the time vs 56% for Staff & Communication.
+    OVERSAMPLE = {"Insurance & Upselling", "Hidden Fees & Billing", "Cleanliness", "Booking & App"}
+    OVERSAMPLE_FACTOR = 3
+
+    classification_inputs, classification_outputs = [], []
+
     for row in dataset["train"]:
         body       = (row.get("review_body") or "").strip()
         summary    = (row.get("summary") or "").strip()
@@ -62,11 +69,18 @@ def build_multitask_dataset(dataset):
         inputs.append(f"Summarize the following car rental review.\n\n{body}\n\nSummary:")
         outputs.append(summary)
 
-        inputs.append(
-            f"Classify this car rental review into one or more of these categories: "
-            f"{categories_str}.\n\nReview: {body}\n\nCategories:"
+        cat_prompt = (
+            f"Classify this car rental review into 1-3 of these categories: {categories_str}.\n"
+            f"Use 'Insurance & Upselling' if insurance or extra products were pushed or required.\n"
+            f"Use 'Hidden Fees & Billing' if unexpected charges or fees are mentioned.\n\n"
+            f"Review: {body}\n\nCategories:"
         )
-        outputs.append(", ".join(categories) if categories else "Staff & Communication")
+        cat_label = ", ".join(categories) if categories else "Staff & Communication"
+
+        repeat = OVERSAMPLE_FACTOR if any(c in OVERSAMPLE for c in categories) else 1
+        for _ in range(repeat):
+            classification_inputs.append(cat_prompt)
+            classification_outputs.append(cat_label)
 
         if sentiment in valid_sentiments:
             inputs.append(
@@ -75,6 +89,9 @@ def build_multitask_dataset(dataset):
                 f"Review: {body}\n\nSentiment:"
             )
             outputs.append(sentiment)
+
+    inputs.extend(classification_inputs)
+    outputs.extend(classification_outputs)
 
     full = Dataset.from_dict({"input": inputs, "output": outputs})
     split = full.train_test_split(test_size=0.1, seed=42)
