@@ -22,7 +22,7 @@ load_dotenv()
 
 CLAUDE_API_KEY = os.environ.get("CLAUDE_API_KEY", "")
 INPUT_FILE     = Path("data_processing/reviews_raw.json")
-OUTPUT_FILE    = Path("data_processing/reviews_labeled.jsonl")
+OUTPUT_FILE    = Path("data_processing/reviews_labeled_short.jsonl")
 
 CATEGORIES = [
     "Cleanliness",
@@ -39,10 +39,9 @@ SYSTEM_PROMPT = f"""You are a car rental review analyst. Given a customer review
 you output a JSON object with exactly these fields:
 
 - "review_body": the original review text, unchanged
-- "summary": 2-3 sentences in English summarizing the main points and overall sentiment.
-  Must genuinely condense the review — not just translate the first sentence.
-  For negative reviews do NOT include positive clauses.
-  For positive reviews do NOT include negative clauses.
+- "summary": exactly 1 sentence in English (max 20 words) capturing the single most important
+  point — the main complaint for negative reviews, or the main praise for positive ones.
+  Be specific, not generic. Do NOT use phrases like "overall experience" or "the customer".
 - "sentiment": exactly one of: "positive", "negative", "mixed"
 - "categories": a JSON array of 1-3 items from this exact list:
   {json.dumps(CATEGORIES)}
