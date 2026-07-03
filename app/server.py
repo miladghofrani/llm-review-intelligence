@@ -170,8 +170,10 @@ def _mbart_summarize(review: str) -> str:
         tokens = model.generate(
             **inputs,
             forced_bos_token_id=tokenizer.lang_code_to_id["en_XX"],
-            max_new_tokens=80,
-            num_beams=2,
+            max_new_tokens=50,
+            num_beams=4,
+            no_repeat_ngram_size=3,
+            length_penalty=0.6,
         )
     return tokenizer.decode(tokens[0], skip_special_tokens=True)
 
