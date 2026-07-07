@@ -73,24 +73,12 @@ def load_saved_peft_model(device, base_model, adapter_path):
     """Loads base model + LoRA adapters for inference."""
     print(f"\n🚀 Loading PEFT model from {adapter_path}...")
 
-    # Clone the original embedding weights BEFORE loading the adapter.
-    # enable_input_require_grads() used during training can cause PEFT to
-    # accidentally save shared.weight and lm_head.weight in the checkpoint
-    # with corrupted values, overwriting the correct base model weights on load.
-    original_embed = base_model.shared.weight.data.clone()
-
     peft_model = PeftModel.from_pretrained(
         base_model,
         adapter_path,
         is_trainable=False,
         force_download=True,
     ).to(device)
-
-    # Restore original embeddings and re-tie lm_head.
-    m = peft_model.base_model.model
-    m.shared.weight.data.copy_(original_embed)
-    if hasattr(m, "lm_head"):
-        m.lm_head.weight = m.shared.weight
 
     print("✅ Model ready for inference.")
     return peft_model
