@@ -83,6 +83,7 @@ def load_saved_peft_model(device, base_model, adapter_path):
         base_model,
         adapter_path,
         is_trainable=False,
+        force_download=True,
     ).to(device)
 
     # Restore original embeddings and re-tie lm_head.
