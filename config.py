@@ -5,8 +5,8 @@ MODEL_NAME   = os.getenv("MODEL_NAME",   "google/flan-t5-large")
 ADAPTER_PATH = os.getenv("ADAPTER_PATH", "miladghofrani/car-rental-peft-adapter-large")
 
 # Summarization model
-MBART_MODEL_NAME   = os.getenv("MBART_MODEL_NAME",   "facebook/mbart-large-cc25")
-MBART_ADAPTER_PATH = os.getenv("MBART_ADAPTER_PATH", "miladghofrani/car-rental-mbart-summarizer")
+MT5_MODEL_NAME   = os.getenv("MT5_MODEL_NAME",   "csebuetnlp/mT5_multilingual_XLSum")
+MT5_ADAPTER_PATH = os.getenv("MT5_ADAPTER_PATH", "miladghofrani/car-rental-mt5-summarizer")
 
 # Training — set MAX_STEPS=0 (or unset) for full training, any positive int for dry run
 MAX_STEPS = int(os.getenv("MAX_STEPS", "0")) or None

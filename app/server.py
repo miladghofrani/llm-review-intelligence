@@ -4,11 +4,14 @@ from typing import List, Optional
 from fastapi import FastAPI
 from pydantic import BaseModel
 
+import re
 import torch
 
 from config import ADAPTER_PATH, CATEGORIES
+
+WHITESPACE_HANDLER = lambda k: re.sub(r'\s+', ' ', re.sub(r'\n+', ' ', k.strip()))
 from .device_utils import get_device
-from .model_loader import load_llm_model, load_tokenizer, load_mbart_model, load_mbart_tokenizer
+from .model_loader import load_llm_model, load_tokenizer, load_mt5_model, load_mt5_tokenizer
 from .peft_trainer import load_saved_peft_model
 from .translator import Translator
 
@@ -109,17 +112,17 @@ async def lifespan(app: FastAPI):
     model      = load_saved_peft_model(device, base_model, ADAPTER_PATH)
     model.eval()
 
-    # mBART — summarization
-    mbart_tokenizer = load_mbart_tokenizer()
-    mbart_model     = load_mbart_model(device)
+    # mT5 — summarization (native language) + DeepL for EN translation
+    mt5_tokenizer = load_mt5_tokenizer()
+    mt5_model     = load_mt5_model(device)
 
-    _state["device"]          = device
-    _state["tokenizer"]       = tokenizer
-    _state["model"]           = model
-    _state["categories_str"]  = ", ".join(CATEGORIES)
-    _state["translator"]      = Translator()
-    _state["mbart_tokenizer"] = mbart_tokenizer
-    _state["mbart_model"]     = mbart_model
+    _state["device"]         = device
+    _state["tokenizer"]      = tokenizer
+    _state["model"]          = model
+    _state["categories_str"] = ", ".join(CATEGORIES)
+    _state["translator"]     = Translator()
+    _state["mt5_tokenizer"]  = mt5_tokenizer
+    _state["mt5_model"]      = mt5_model
 
     print("\n✅ Server ready — waiting for requests.\n")
     yield
@@ -160,39 +163,48 @@ def _build_analysis(req: ReviewRequest, english_review: str, detected_language: 
     )
 
 
-def _mbart_summarize(review: str) -> str:
-    tokenizer = _state["mbart_tokenizer"]
-    model     = _state["mbart_model"]
-    device    = _state["device"]
-    tokenizer.src_lang = "de_DE"
-    inputs = tokenizer(review, return_tensors="pt", truncation=True, max_length=512).to(device)
-    with torch.no_grad():
-        tokens = model.generate(
-            **inputs,
-            forced_bos_token_id=tokenizer.lang_code_to_id["en_XX"],
-            max_new_tokens=70,
-            num_beams=4,
-            no_repeat_ngram_size=3,
-            length_penalty=0.6,
-        )
-    return tokenizer.decode(tokens[0], skip_special_tokens=True)
-
-
-def _mbart_summarize_batch(reviews: List[str]) -> List[str]:
-    tokenizer = _state["mbart_tokenizer"]
-    model     = _state["mbart_model"]
-    device    = _state["device"]
-    tokenizer.src_lang = "de_DE"
+def _mt5_summarize(review: str) -> str:
+    tokenizer  = _state["mt5_tokenizer"]
+    model      = _state["mt5_model"]
+    device     = _state["device"]
+    translator = _state["translator"]
     inputs = tokenizer(
-        reviews, return_tensors="pt", padding=True, truncation=True, max_length=512
+        WHITESPACE_HANDLER(review), return_tensors="pt", truncation=True, max_length=512
     ).to(device)
     with torch.no_grad():
         tokens = model.generate(
-            **inputs,
-            forced_bos_token_id=tokenizer.lang_code_to_id["en_XX"],
+            input_ids=inputs["input_ids"],
+            attention_mask=inputs["attention_mask"],
             max_new_tokens=80,
+            num_beams=4,
+            no_repeat_ngram_size=2,
+            length_penalty=0.8,
         )
-    return tokenizer.batch_decode(tokens, skip_special_tokens=True)
+    native_summary = tokenizer.decode(tokens[0], skip_special_tokens=True)
+    english_summary, _ = translator.to_english(native_summary)
+    return english_summary
+
+
+def _mt5_summarize_batch(reviews: List[str]) -> List[str]:
+    tokenizer  = _state["mt5_tokenizer"]
+    model      = _state["mt5_model"]
+    device     = _state["device"]
+    translator = _state["translator"]
+    inputs = tokenizer(
+        [WHITESPACE_HANDLER(r) for r in reviews],
+        return_tensors="pt", padding=True, truncation=True, max_length=512,
+    ).to(device)
+    with torch.no_grad():
+        tokens = model.generate(
+            input_ids=inputs["input_ids"],
+            attention_mask=inputs["attention_mask"],
+            max_new_tokens=80,
+            num_beams=4,
+            no_repeat_ngram_size=2,
+            length_penalty=0.8,
+        )
+    native_summaries = tokenizer.batch_decode(tokens, skip_special_tokens=True)
+    return [translator.to_english(s)[0] for s in native_summaries]
 
 
 def _analyse(req: ReviewRequest) -> ReviewAnalysis:
@@ -213,7 +225,7 @@ def _analyse(req: ReviewRequest) -> ReviewAnalysis:
         )[0]
         return tokenizer.decode(tokens, skip_special_tokens=True)
 
-    summary    = _mbart_summarize(req.review)
+    summary    = _mt5_summarize(req.review)
     categories = _parse_categories(_generate(
         f"Classify this car rental review into 1-3 of these categories: {categories_str}.\n"
         f"Use 'Insurance & Upselling' if insurance or extra products were pushed or required.\n"
@@ -256,7 +268,7 @@ def _analyse_batch(requests: List[ReviewRequest]) -> List[ReviewAnalysis]:
         )
         return tokenizer.batch_decode(tokens, skip_special_tokens=True)
 
-    summaries      = _mbart_summarize_batch(original_reviews)
+    summaries      = _mt5_summarize_batch(original_reviews)
     categories_raw = _batch_generate(
         [
             f"Classify this car rental review into 1-3 of these categories: {categories_str}.\n"
