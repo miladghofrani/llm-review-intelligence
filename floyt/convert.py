@@ -19,16 +19,18 @@ def _extract(entry: dict) -> dict | None:
     if not review:
         return None
     return {
-        "review":           review,
-        "database_id":      fields.get("databaseId",      [None])[0],
-        "provider":         fields.get("provider",        [None])[0],
-        "provider_id":      fields.get("providerId",      [None])[0],
-        "renter":           fields.get("renter",          [None])[0],
-        "location":         fields.get("location",        [None])[0],
-        "departure":        fields.get("departure",       [None])[0],
-        "country_code":     fields.get("countryCode",     [None])[0],
-        "aggregate_rating": fields.get("aggregateRating", [None])[0],
-        "renter_rating":    fields.get("renterRating",    [None])[0],
+        "review":                   review,
+        "database_id":              fields.get("databaseId",             [None])[0],
+        "provider":                 fields.get("provider",               [None])[0],
+        "renter":                   fields.get("renter",                 [None])[0],
+        "location":                 fields.get("location",               [None])[0],
+        "aggregate_rating":         fields.get("aggregateRating",        [None])[0],
+        "renter_rating":            fields.get("renterRating",           [None])[0],
+        "car_condition_rating":     fields.get("carConditionRating",     [None])[0],
+        "processing_speed_rating":  fields.get("processingSpeedRating",  [None])[0],
+        "provider_care_rating":     fields.get("providerCareRating",     [None])[0],
+        "service_level_rating":     fields.get("serviceLevelRating",     [None])[0],
+        "recommendation_rating":    fields.get("recommendationRating",   [None])[0],
     }
 
 

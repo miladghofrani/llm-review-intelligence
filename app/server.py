@@ -45,15 +45,18 @@ class ReviewRequest(BaseModel):
     review: str
     # Floyt metadata — passed through to the Elasticsearch output as-is.
     # All fields are optional so the endpoint also works without Floyt context.
-    database_id: Optional[int] = None
+    database_id: Optional[int] = None    # identifies the ES document to update with the enrichment
     provider: Optional[str] = None       # intermediary, e.g. "BSPAuto"
-    provider_id: Optional[str] = None
     renter: Optional[str] = None         # on-site company, e.g. "Dollar"
     location: Optional[str] = None       # pickup city
-    departure: Optional[str] = None      # airport / station code
-    country_code: Optional[str] = None
     aggregate_rating: Optional[float] = None
     renter_rating: Optional[float] = None
+    # Elasticsearch rating fields — customer-given scores per dimension.
+    car_condition_rating: Optional[float] = None
+    processing_speed_rating: Optional[float] = None
+    provider_care_rating: Optional[float] = None
+    service_level_rating: Optional[float] = None
+    recommendation_rating: Optional[float] = None   # 0-10 NPS-style score
 
 
 class ElasticsearchDoc(BaseModel):
@@ -65,13 +68,15 @@ class ElasticsearchDoc(BaseModel):
     # ── Floyt passthrough ──
     database_id: Optional[int]
     provider: Optional[str]
-    provider_id: Optional[str]
     renter: Optional[str]
     location: Optional[str]
-    departure: Optional[str]
-    country_code: Optional[str]
     aggregate_rating: Optional[float]
     renter_rating: Optional[float]
+    car_condition_rating: Optional[float]
+    processing_speed_rating: Optional[float]
+    provider_care_rating: Optional[float]
+    service_level_rating: Optional[float]
+    recommendation_rating: Optional[float]
     # ── AI-generated ──
     language: str                   # original language code (de, fr, en, …)
     sentiment: str                  # positive | negative | mixed
@@ -109,6 +114,8 @@ class AggregateResponse(BaseModel):
     sentiment_distribution: dict   # positive/negative/mixed counts + percentages
     top_categories: List[str]      # top 3 most mentioned categories
     flags: dict                    # upselling / hidden_fees / damage_claims counts
+    ratings: dict                  # average of each customer-given rating dimension
+    nps: dict                      # promoter/passive/detractor counts + NPS score
     aggregate_summary: str         # Amazon-style narrative paragraph
 
 
@@ -151,13 +158,15 @@ def _build_analysis(req: ReviewRequest, detected_language: str,
         elasticsearch=ElasticsearchDoc(
             database_id=req.database_id,
             provider=req.provider,
-            provider_id=req.provider_id,
             renter=req.renter,
             location=req.location,
-            departure=req.departure,
-            country_code=req.country_code,
             aggregate_rating=req.aggregate_rating,
             renter_rating=req.renter_rating,
+            car_condition_rating=req.car_condition_rating,
+            processing_speed_rating=req.processing_speed_rating,
+            provider_care_rating=req.provider_care_rating,
+            service_level_rating=req.service_level_rating,
+            recommendation_rating=req.recommendation_rating,
             language=detected_language,
             sentiment=sentiment,
             primary_category=categories[0] if categories else "Staff & Communication",
@@ -272,6 +281,43 @@ _CATEGORY_NATURAL = {
 }
 
 
+RATING_FIELDS = [
+    "aggregate_rating",
+    "renter_rating",
+    "car_condition_rating",
+    "processing_speed_rating",
+    "provider_care_rating",
+    "service_level_rating",
+    "recommendation_rating",
+]
+
+
+def _avg_ratings(results: List[ReviewAnalysis]) -> dict:
+    averages = {}
+    for field in RATING_FIELDS:
+        values = [v for r in results if (v := getattr(r.elasticsearch, field)) is not None]
+        averages[field] = round(sum(values) / len(values), 2) if values else None
+    return averages
+
+
+def _nps(results: List[ReviewAnalysis]) -> dict:
+    scores = [r.elasticsearch.recommendation_rating for r in results
+              if r.elasticsearch.recommendation_rating is not None]
+    if not scores:
+        return {"promoters": 0, "passives": 0, "detractors": 0, "score": None}
+
+    promoters  = sum(1 for s in scores if s >= 9)
+    detractors = sum(1 for s in scores if s <= 6)
+    passives   = len(scores) - promoters - detractors
+
+    return {
+        "promoters":  promoters,
+        "passives":   passives,
+        "detractors": detractors,
+        "score": round((promoters - detractors) / len(scores) * 100),
+    }
+
+
 def _build_aggregate_narrative(
     total: int, provider, location, renter,
     pos: int, neg: int, mixed: int,
@@ -360,6 +406,9 @@ def _aggregate(req: AggregateRequest) -> AggregateResponse:
     neg   = sentiment_counts["negative"]
     mixed = sentiment_counts["mixed"]
 
+    ratings = _avg_ratings(results)
+    nps     = _nps(results)
+
     narrative = _build_aggregate_narrative(
         total=total, provider=req.provider, location=req.location, renter=req.renter,
         pos=pos, neg=neg, mixed=mixed,
@@ -386,6 +435,8 @@ def _aggregate(req: AggregateRequest) -> AggregateResponse:
             "hidden_fees_count": hidden_fees_count,
             "damage_claims_count": damage_count,
         },
+        ratings=ratings,
+        nps=nps,
         aggregate_summary=narrative,
     )
 

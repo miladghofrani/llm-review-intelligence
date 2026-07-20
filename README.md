@@ -21,10 +21,13 @@ Send a review (in any language) and get back:
     "provider": "BSPAuto",
     "renter": "Keddy by Europcar",
     "location": "Palma de Mallorca",
-    "departure": "PMI",
-    "country_code": "ES",
     "aggregate_rating": 2.0,
     "renter_rating": 1.33,
+    "car_condition_rating": 3.0,
+    "processing_speed_rating": 2.0,
+    "provider_care_rating": 1.0,
+    "service_level_rating": 1.0,
+    "recommendation_rating": 2.0,
     "language": "de",
     "sentiment": "negative",
     "primary_category": "Pickup Experience",
@@ -129,13 +132,15 @@ Analyse a single review. All metadata fields are optional — when provided they
   "review": "string (required)",
   "database_id": 489244,
   "provider": "BSPAuto",
-  "provider_id": "bspauto",
   "renter": "Right Cars",
   "location": "Heraklion",
-  "departure": "HER",
-  "country_code": "GR",
   "aggregate_rating": 2.5,
-  "renter_rating": 2.33
+  "renter_rating": 2.33,
+  "car_condition_rating": 4,
+  "processing_speed_rating": 3,
+  "provider_care_rating": 5,
+  "service_level_rating": 4,
+  "recommendation_rating": 8
 }
 ```
 
