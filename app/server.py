@@ -7,9 +7,9 @@ from pydantic import BaseModel
 from config import ADAPTER_PATH, CATEGORIES
 
 from .device_utils import get_device
+from .language_detector import LanguageDetector
 from .model_loader import load_llm_model, load_tokenizer
 from .peft_trainer import load_saved_peft_model
-from .translator import Translator
 
 _state: dict = {}
 
@@ -85,7 +85,6 @@ class ElasticsearchDoc(BaseModel):
 class ReviewAnalysis(BaseModel):
     original_review: str
     detected_language: str
-    english_translation: Optional[str]  # null when review was already in English
     sentiment: str
     categories: List[str]
     elasticsearch: ElasticsearchDoc
@@ -125,11 +124,11 @@ async def lifespan(app: FastAPI):
     model      = load_saved_peft_model(device, base_model, ADAPTER_PATH)
     model.eval()
 
-    _state["device"]         = device
-    _state["tokenizer"]      = tokenizer
-    _state["model"]          = model
-    _state["categories_str"] = ", ".join(CATEGORIES)
-    _state["translator"]     = Translator()
+    _state["device"]            = device
+    _state["tokenizer"]         = tokenizer
+    _state["model"]             = model
+    _state["categories_str"]    = ", ".join(CATEGORIES)
+    _state["language_detector"] = LanguageDetector()
 
     print("\n✅ Server ready — waiting for requests.\n")
     yield
@@ -141,13 +140,12 @@ app = FastAPI(title="Car Rental Review Inference", lifespan=lifespan)
 
 # ── Inference ──────────────────────────────────────────────────────────────────
 
-def _build_analysis(req: ReviewRequest, english_review: str, detected_language: str,
+def _build_analysis(req: ReviewRequest, detected_language: str,
                     categories: List[str], sentiment: str) -> ReviewAnalysis:
     flags = _category_flags(categories)
     return ReviewAnalysis(
         original_review=req.review,
         detected_language=detected_language,
-        english_translation=english_review if detected_language != "en" else None,
         sentiment=sentiment,
         categories=categories,
         elasticsearch=ElasticsearchDoc(
@@ -175,7 +173,7 @@ def _analyse(req: ReviewRequest) -> ReviewAnalysis:
     device         = _state["device"]
     categories_str = _state["categories_str"]
 
-    english_review, detected_language = _state["translator"].to_english(req.review)
+    detected_language = _state["language_detector"].detect(req.review)
 
     def _generate(prompt: str, max_new_tokens: int, **kwargs) -> str:
         inputs = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=512).to(device)
@@ -201,7 +199,7 @@ def _analyse(req: ReviewRequest) -> ReviewAnalysis:
         max_new_tokens=5,
     ))
 
-    return _build_analysis(req, english_review, detected_language, categories, sentiment)
+    return _build_analysis(req, detected_language, categories, sentiment)
 
 
 def _analyse_batch(requests: List[ReviewRequest]) -> List[ReviewAnalysis]:
@@ -210,10 +208,8 @@ def _analyse_batch(requests: List[ReviewRequest]) -> List[ReviewAnalysis]:
     device         = _state["device"]
     categories_str = _state["categories_str"]
 
-    translations       = _state["translator"].batch_to_english([r.review for r in requests])
-    english_reviews    = [t[0] for t in translations]
-    detected_languages = [t[1] for t in translations]
     original_reviews   = [r.review for r in requests]
+    detected_languages = _state["language_detector"].batch_detect(original_reviews)
 
     def _batch_generate(prompts: List[str], max_new_tokens: int, **kwargs) -> List[str]:
         inputs = tokenizer(
@@ -251,12 +247,12 @@ def _analyse_batch(requests: List[ReviewRequest]) -> List[ReviewAnalysis]:
 
     return [
         _build_analysis(
-            req, eng, lang,
+            req, lang,
             _parse_categories(cats_str),
             _parse_sentiment(sent_raw),
         )
-        for req, eng, lang, cats_str, sent_raw in zip(
-            requests, english_reviews, detected_languages,
+        for req, lang, cats_str, sent_raw in zip(
+            requests, detected_languages,
             categories_raw, sentiments_raw,
         )
     ]

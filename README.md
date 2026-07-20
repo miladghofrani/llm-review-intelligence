@@ -1,6 +1,6 @@
 # Car Rental Review AI
 
-A PEFT/LoRA fine-tuned `flan-t5-large` model that analyses car rental customer reviews — classifying the issue type, detecting sentiment, and translating from German or French — with structured output ready to index into Elasticsearch.
+A PEFT/LoRA fine-tuned `flan-t5-large` model that analyses car rental customer reviews — classifying the issue type, detecting sentiment, and detecting the original language (German, French, English) — with structured output ready to index into Elasticsearch.
 
 Built for the Customer Experience team at [Billiger Mietwagen](https://www.billiger-mietwagen.de).
 
@@ -14,7 +14,6 @@ Send a review (in any language) and get back:
 {
   "original_review": "Katastrophale Abwicklung. Insgesamt standen wir über eine Stunde an...",
   "detected_language": "de",
-  "english_translation": "Catastrophic handling. We queued for over an hour...",
   "sentiment": "negative",
   "categories": ["Pickup Experience", "Insurance & Upselling", "Return Experience"],
   "elasticsearch": {
@@ -39,7 +38,7 @@ Send a review (in any language) and get back:
 
 **Categories:** Cleanliness · Vehicle Condition · Pickup Experience · Return Experience · Hidden Fees & Billing · Insurance & Upselling · Staff & Communication · Booking & App
 
-**Languages:** German, French, English (DeepL translation for DE/FR → EN before inference)
+**Languages:** German, French, English (auto-detected via `langdetect`; the model classifies the review directly in its original language)
 
 ---
 
@@ -50,7 +49,7 @@ Send a review (in any language) and get back:
 │   ├── server.py               # endpoints, request/response models
 │   ├── model_loader.py         # loads flan-t5-large base model
 │   ├── peft_trainer.py         # LoRA adapter injection and loading
-│   ├── translator.py           # DeepL translation + langdetect
+│   ├── language_detector.py    # langdetect wrapper for original review language
 │   └── device_utils.py         # CPU / CUDA detection
 │
 ├── data_processing/            # training data pipeline
@@ -87,7 +86,7 @@ Send a review (in any language) and get back:
 
 ```bash
 cp .env.example .env
-# Fill in HF_TOKEN, DEEPL_API_KEY, GROQ_API_KEY
+# Fill in HF_TOKEN, GROQ_API_KEY
 ```
 
 **2. Build and start**
@@ -165,7 +164,6 @@ See `.env.example` for the full list with descriptions. Required keys:
 | Variable | Purpose |
 |---|---|
 | `HF_TOKEN` | Pull the LoRA adapter from HuggingFace Hub on startup |
-| `DEEPL_API_KEY` | Translate DE/FR reviews to English before inference |
 | `GROQ_API_KEY` | Generate synthetic training data (only needed for `generate_dataset.py`) |
 
 ---
@@ -235,7 +233,7 @@ docker push \
 - Launch type: **Fargate**
 - CPU: `1024` (1 vCPU), Memory: `4096` MB minimum — `8192` MB recommended for `flan-t5-large`
 - Container port: `8742`
-- Environment variables: `HF_TOKEN`, `DEEPL_API_KEY` — store in **AWS Secrets Manager** and reference them in the task definition (never hardcode)
+- Environment variables: `HF_TOKEN` — store in **AWS Secrets Manager** and reference it in the task definition (never hardcode)
 
 **3. Create a service**
 

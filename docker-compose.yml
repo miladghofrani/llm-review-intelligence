@@ -23,7 +23,6 @@ services:
       - PYTHONUNBUFFERED=1
       - AWS_DEFAULT_REGION=eu-central-1
       - HF_TOKEN=${HF_TOKEN}
-      - DEEPL_API_KEY=${DEEPL_API_KEY}
 
 volumes:
   hf-cache:
