@@ -43,15 +43,11 @@ def _category_flags(categories: List[str]) -> dict:
 
 class ReviewRequest(BaseModel):
     review: str
-    # Floyt metadata — passed through to the Elasticsearch output as-is.
-    # All fields are optional so the endpoint also works without Floyt context.
-    database_id: Optional[int] = None    # identifies the ES document to update with the enrichment
-    provider: Optional[str] = None       # intermediary, e.g. "BSPAuto"
-    renter: Optional[str] = None         # on-site company, e.g. "Dollar"
-    location: Optional[str] = None       # pickup city
+    database_id: Optional[int] = None    # identifies the ES document to merge the enrichment into
+    # Customer-given rating scores — not echoed back in the response (the caller
+    # already has these), but used to compute averages/NPS in /infer/aggregate.
     aggregate_rating: Optional[float] = None
     renter_rating: Optional[float] = None
-    # Elasticsearch rating fields — customer-given scores per dimension.
     car_condition_rating: Optional[float] = None
     processing_speed_rating: Optional[float] = None
     provider_care_rating: Optional[float] = None
@@ -61,23 +57,11 @@ class ReviewRequest(BaseModel):
 
 class ElasticsearchDoc(BaseModel):
     """
-    Ready-to-index document that merges the original Floyt metadata with
-    AI-generated enrichments. Store this document to enable filtering and
-    aggregations across providers, sentiment, issue types, and locations.
+    AI-generated enrichment to merge into the Elasticsearch document identified
+    by database_id. Excludes fields the caller already has (provider, renter,
+    location, ratings, ...) — only what this model adds is returned.
     """
-    # ── Floyt passthrough ──
     database_id: Optional[int]
-    provider: Optional[str]
-    renter: Optional[str]
-    location: Optional[str]
-    aggregate_rating: Optional[float]
-    renter_rating: Optional[float]
-    car_condition_rating: Optional[float]
-    processing_speed_rating: Optional[float]
-    provider_care_rating: Optional[float]
-    service_level_rating: Optional[float]
-    recommendation_rating: Optional[float]
-    # ── AI-generated ──
     language: str                   # original language code (de, fr, en, …)
     sentiment: str                  # positive | negative | mixed
     primary_category: str           # top category for quick filtering
@@ -157,16 +141,6 @@ def _build_analysis(req: ReviewRequest, detected_language: str,
         categories=categories,
         elasticsearch=ElasticsearchDoc(
             database_id=req.database_id,
-            provider=req.provider,
-            renter=req.renter,
-            location=req.location,
-            aggregate_rating=req.aggregate_rating,
-            renter_rating=req.renter_rating,
-            car_condition_rating=req.car_condition_rating,
-            processing_speed_rating=req.processing_speed_rating,
-            provider_care_rating=req.provider_care_rating,
-            service_level_rating=req.service_level_rating,
-            recommendation_rating=req.recommendation_rating,
             language=detected_language,
             sentiment=sentiment,
             primary_category=categories[0] if categories else "Staff & Communication",
@@ -292,17 +266,16 @@ RATING_FIELDS = [
 ]
 
 
-def _avg_ratings(results: List[ReviewAnalysis]) -> dict:
+def _avg_ratings(requests: List[ReviewRequest]) -> dict:
     averages = {}
     for field in RATING_FIELDS:
-        values = [v for r in results if (v := getattr(r.elasticsearch, field)) is not None]
+        values = [v for r in requests if (v := getattr(r, field)) is not None]
         averages[field] = round(sum(values) / len(values), 2) if values else None
     return averages
 
 
-def _nps(results: List[ReviewAnalysis]) -> dict:
-    scores = [r.elasticsearch.recommendation_rating for r in results
-              if r.elasticsearch.recommendation_rating is not None]
+def _nps(requests: List[ReviewRequest]) -> dict:
+    scores = [r.recommendation_rating for r in requests if r.recommendation_rating is not None]
     if not scores:
         return {"promoters": 0, "passives": 0, "detractors": 0, "score": None}
 
@@ -406,8 +379,8 @@ def _aggregate(req: AggregateRequest) -> AggregateResponse:
     neg   = sentiment_counts["negative"]
     mixed = sentiment_counts["mixed"]
 
-    ratings = _avg_ratings(results)
-    nps     = _nps(results)
+    ratings = _avg_ratings(req.reviews)
+    nps     = _nps(req.reviews)
 
     narrative = _build_aggregate_narrative(
         total=total, provider=req.provider, location=req.location, renter=req.renter,
