@@ -1,7 +1,7 @@
 import torch
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
-from config import MODEL_NAME, MT5_MODEL_NAME, MT5_ADAPTER_PATH
+from config import MODEL_NAME
 
 def print_number_of_trainable_model_parameters(model):
     trainable_model_params = 0
@@ -34,25 +34,3 @@ def load_llm_model(device, model_name=MODEL_NAME):
     model = AutoModelForSeq2SeqLM.from_pretrained(model_name, torch_dtype=target_dtype).to(device)
     print(f"✅ {model_name} loaded using {target_dtype}.")
     return model
-
-
-def load_mt5_tokenizer(model_name=MT5_ADAPTER_PATH):
-    print("\n🔤 Loading mT5 Tokenizer...")
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    print(f"✅ mT5 tokenizer loaded.")
-    return tokenizer
-
-
-def load_mt5_model(device, base_model_name=MT5_MODEL_NAME, adapter_path=MT5_ADAPTER_PATH):
-    from peft import PeftModel
-    print("\n🧠 Loading mT5 summarization model...")
-    base = AutoModelForSeq2SeqLM.from_pretrained(
-        base_model_name,
-        torch_dtype=torch.bfloat16 if device == "cuda" else torch.float32,
-    ).to(device)
-    model = PeftModel.from_pretrained(base, adapter_path, is_trainable=False)
-    model.eval()
-    print(f"✅ mT5 + adapter loaded from {adapter_path}.")
-    return model
-
-

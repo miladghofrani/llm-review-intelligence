@@ -12,7 +12,7 @@ def load_review_dataset():
     """
     Loads the car rental review dataset.
     Uses the local JSONL file if available, otherwise loads from HF Hub.
-    Columns: review_body, summary, categories.
+    Columns: review_body, categories, sentiment.
     """
     if LOCAL_FILE.exists():
         print(f"\n📥 Loading local dataset from {LOCAL_FILE.name}...")
@@ -28,7 +28,6 @@ def load_review_dataset():
     print("\n🔍 Sample Review:")
     print("-" * 60)
     print(f"Review    : {sample['review_body'][:200]}...")
-    print(f"Summary   : {sample['summary']}")
     print(f"Categories: {sample['categories']}")
     print("-" * 60)
 
@@ -37,10 +36,9 @@ def load_review_dataset():
 
 def build_multitask_dataset(dataset):
     """
-    Converts raw reviews into three training examples per review:
-    1. Summarization  — input: full review  /  output: summary
-    2. Classification — input: full review  /  output: comma-separated categories
-    3. Sentiment      — input: full review  /  output: positive | negative | mixed
+    Converts raw reviews into two training examples per review:
+    1. Classification — input: full review  /  output: comma-separated categories
+    2. Sentiment      — input: full review  /  output: positive | negative | mixed
 
     Returns a DatasetDict with 'train' and 'test' splits (90/10).
     """
@@ -59,15 +57,11 @@ def build_multitask_dataset(dataset):
 
     for row in dataset["train"]:
         body       = (row.get("review_body") or "").strip()
-        summary    = (row.get("summary") or "").strip()
         categories = row.get("categories") or []
         sentiment  = (row.get("sentiment") or "").strip().lower()
 
-        if not body or not summary:
+        if not body:
             continue
-
-        inputs.append(f"Summarize the following car rental review.\n\n{body}\n\nSummary:")
-        outputs.append(summary)
 
         cat_prompt = (
             f"Classify this car rental review into 1-3 of these categories: {categories_str}.\n"

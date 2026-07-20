@@ -1,6 +1,6 @@
 # Car Rental Review AI
 
-A PEFT/LoRA fine-tuned `flan-t5-large` model that analyses car rental customer reviews — summarising them, classifying the issue type, detecting sentiment, and translating from German or French — with structured output ready to index into Elasticsearch.
+A PEFT/LoRA fine-tuned `flan-t5-large` model that analyses car rental customer reviews — classifying the issue type, detecting sentiment, and translating from German or French — with structured output ready to index into Elasticsearch.
 
 Built for the Customer Experience team at [Billiger Mietwagen](https://www.billiger-mietwagen.de).
 
@@ -15,7 +15,6 @@ Send a review (in any language) and get back:
   "original_review": "Katastrophale Abwicklung. Insgesamt standen wir über eine Stunde an...",
   "detected_language": "de",
   "english_translation": "Catastrophic handling. We queued for over an hour...",
-  "summary": "Long wait at pickup despite reservation. Staff applied pressure to buy extras and disputed pre-existing damage at return.",
   "sentiment": "negative",
   "categories": ["Pickup Experience", "Insurance & Upselling", "Return Experience"],
   "elasticsearch": {
@@ -61,8 +60,8 @@ Send a review (in any language) and get back:
 │
 ├── scripts/                    # one-off tools, not imported by the server
 │   ├── train.py                # local training entrypoint
-│   ├── evaluate.py             # ROUGE evaluation vs base model
 │   ├── generate_dataset.py     # generate synthetic reviews via Groq API
+│   ├── label_reviews.py        # label real Floyt reviews with sentiment + categories via Claude
 │   └── push_dataset.py         # push JSONL dataset to HuggingFace Hub
 │
 ├── floyt/                      # Elasticsearch / Floyt integration helpers
@@ -71,7 +70,7 @@ Send a review (in any language) and get back:
 │   └── batch_request.json      # ready-to-use curl payload
 │
 ├── notebooks/
-│   └── training.ipynb          # Kaggle training notebook (flan-t5-large, 3 epochs)
+│   └── classification.ipynb    # Kaggle training notebook (flan-t5-large, 3 epochs)
 │
 ├── config.py                   # MODEL_NAME, ADAPTER_PATH, CATEGORIES, training params
 ├── Dockerfile
@@ -151,7 +150,7 @@ Same fields per review, wrapped in a list:
 }
 ```
 
-Batching runs 3 `model.generate()` calls (summary, categories, sentiment) over all reviews at once — significantly faster than calling `/infer` in a loop.
+Batching runs 2 `model.generate()` calls (categories, sentiment) over all reviews at once — significantly faster than calling `/infer` in a loop.
 
 ### `GET /health`
 
@@ -181,19 +180,13 @@ See `.env.example` for the full list with descriptions. Required keys:
 
 ### Retrain the model
 
-Training runs on Kaggle (free T4 GPU). Open `notebooks/training.ipynb`, set your secrets (`HF_TOKEN`), and run all cells. The notebook trains for 3 epochs and pushes the updated adapter to HuggingFace Hub.
+Training runs on Kaggle (free T4 GPU). Open `notebooks/classification.ipynb`, set your secrets (`HF_TOKEN`), and run all cells. The notebook trains for 3 epochs and pushes the updated adapter to HuggingFace Hub.
 
 To generate additional training data locally:
 
 ```bash
 python3 scripts/generate_dataset.py    # resumes from current count, targets 10,000 total
 python3 scripts/push_dataset.py        # pushes JSONL to HuggingFace Hub
-```
-
-To evaluate ROUGE scores against the base model:
-
-```bash
-python3 scripts/evaluate.py
 ```
 
 **When to retrain:** Only when adding or changing categories, or when you have accumulated a significant number of real labelled reviews to add to the training set. The model does not need periodic retraining for the same task.

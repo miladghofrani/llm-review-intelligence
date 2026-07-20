@@ -48,22 +48,17 @@ Output ONLY one JSON object per line — no array brackets, no markdown, no expl
 
 Each line must have exactly these fields:
 - "review_body": A realistic review (4-8 sentences). Written naturally as a real customer.
-- "summary": 2-3 sentences capturing the main points and overall sentiment.
 - "categories": 1-3 items from: {cats}
 
 Rules:
 - 40% positive, 40% negative, 20% mixed sentiment
 - Vary: locations (airports, city centers, train stations), car types, rental companies
 - Cover all 8 categories roughly equally across the batch
-- Summaries must genuinely condense the review — not just repeat the first sentence
-- For POSITIVE reviews the summary must NOT contain "but" or any negative clause
-- For NEGATIVE reviews the summary must NOT contain "however" or any positive clause
-- For MIXED reviews use "however" or "but" to contrast pros and cons
 
 Examples:
-{{"review_body": "Fantastic experience from start to finish. The car was spotless and ready on time. Staff were friendly and professional with no upselling pressure whatsoever. Return at Lyon airport took under five minutes.", "summary": "Smooth and pleasant rental experience with a clean car and professional staff. Pickup and return were both fast and hassle-free.", "categories": ["Cleanliness", "Pickup Experience", "Return Experience"]}}
-{{"review_body": "I picked up a compact car at Munich airport last week. The queue at the counter took nearly an hour despite my online reservation. Once I finally got the car, it was clean and in good shape. However, on my final invoice I noticed a 45 EUR airport surcharge that was never mentioned during booking.", "summary": "Long wait at pickup despite a pre-existing reservation. An undisclosed airport surcharge appeared on the final invoice.", "categories": ["Pickup Experience", "Hidden Fees & Billing"]}}
-{{"review_body": "Nightmare from start to finish. The car smelled of cigarettes and had visible damage not noted on the contract. Staff were dismissive when I raised concerns and refused to provide an updated damage report.", "summary": "Terrible experience with a dirty, damaged vehicle and unhelpful staff who refused to acknowledge pre-existing damage.", "categories": ["Cleanliness", "Vehicle Condition", "Staff & Communication"]}}
+{{"review_body": "Fantastic experience from start to finish. The car was spotless and ready on time. Staff were friendly and professional with no upselling pressure whatsoever. Return at Lyon airport took under five minutes.", "categories": ["Cleanliness", "Pickup Experience", "Return Experience"]}}
+{{"review_body": "I picked up a compact car at Munich airport last week. The queue at the counter took nearly an hour despite my online reservation. Once I finally got the car, it was clean and in good shape. However, on my final invoice I noticed a 45 EUR airport surcharge that was never mentioned during booking.", "categories": ["Pickup Experience", "Hidden Fees & Billing"]}}
+{{"review_body": "Nightmare from start to finish. The car smelled of cigarettes and had visible damage not noted on the contract. Staff were dismissive when I raised concerns and refused to provide an updated damage report.", "categories": ["Cleanliness", "Vehicle Condition", "Staff & Communication"]}}
 
 Generate exactly {n} lines now:"""
 

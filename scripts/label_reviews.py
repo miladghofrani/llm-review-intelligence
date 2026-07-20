@@ -1,5 +1,5 @@
 """
-Labels real Floyt reviews with English summaries and categories using Claude Haiku.
+Labels real Floyt reviews with sentiment and categories using Claude Haiku.
 Reads  : data_processing/reviews_raw.json
 Writes : data_processing/reviews_labeled.jsonl  (resumes if interrupted)
 
@@ -39,9 +39,6 @@ SYSTEM_PROMPT = f"""You are a car rental review analyst. Given a customer review
 you output a JSON object with exactly these fields:
 
 - "review_body": the original review text, unchanged
-- "summary": exactly 1 sentence in English (max 20 words) capturing the single most important
-  point — the main complaint for negative reviews, or the main praise for positive ones.
-  Be specific, not generic. Do NOT use phrases like "overall experience" or "the customer".
 - "sentiment": exactly one of: "positive", "negative", "mixed"
 - "categories": a JSON array of 1-3 items from this exact list:
   {json.dumps(CATEGORIES)}
@@ -94,7 +91,7 @@ def label_review(client: anthropic.Anthropic, review: str) -> dict | None:
                 text = text.strip()
             obj = json.loads(text)
             # Validate required fields
-            if not all(k in obj for k in ("review_body", "summary", "sentiment", "categories")):
+            if not all(k in obj for k in ("review_body", "sentiment", "categories")):
                 raise ValueError("Missing fields in response")
             if obj["sentiment"] not in ("positive", "negative", "mixed"):
                 obj["sentiment"] = "negative"

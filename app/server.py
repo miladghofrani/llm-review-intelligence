@@ -4,14 +4,10 @@ from typing import List, Optional
 from fastapi import FastAPI
 from pydantic import BaseModel
 
-import re
-import torch
-
 from config import ADAPTER_PATH, CATEGORIES
 
-WHITESPACE_HANDLER = lambda k: re.sub(r'\s+', ' ', re.sub(r'\n+', ' ', k.strip()))
 from .device_utils import get_device
-from .model_loader import load_llm_model, load_tokenizer, load_mt5_model, load_mt5_tokenizer
+from .model_loader import load_llm_model, load_tokenizer
 from .peft_trainer import load_saved_peft_model
 from .translator import Translator
 
@@ -90,7 +86,6 @@ class ReviewAnalysis(BaseModel):
     original_review: str
     detected_language: str
     english_translation: Optional[str]  # null when review was already in English
-    summary: str
     sentiment: str
     categories: List[str]
     elasticsearch: ElasticsearchDoc
@@ -98,6 +93,24 @@ class ReviewAnalysis(BaseModel):
 
 class BatchReviewRequest(BaseModel):
     reviews: List[ReviewRequest]
+
+
+class AggregateRequest(BaseModel):
+    reviews: List[ReviewRequest]
+    provider: Optional[str] = None
+    location: Optional[str] = None
+    renter: Optional[str] = None
+
+
+class AggregateResponse(BaseModel):
+    provider: Optional[str]
+    location: Optional[str]
+    renter: Optional[str]
+    total_reviews: int
+    sentiment_distribution: dict   # positive/negative/mixed counts + percentages
+    top_categories: List[str]      # top 3 most mentioned categories
+    flags: dict                    # upselling / hidden_fees / damage_claims counts
+    aggregate_summary: str         # Amazon-style narrative paragraph
 
 
 # ── App ────────────────────────────────────────────────────────────────────────
@@ -112,17 +125,11 @@ async def lifespan(app: FastAPI):
     model      = load_saved_peft_model(device, base_model, ADAPTER_PATH)
     model.eval()
 
-    # mT5 — summarization (native language) + DeepL for EN translation
-    mt5_tokenizer = load_mt5_tokenizer()
-    mt5_model     = load_mt5_model(device)
-
     _state["device"]         = device
     _state["tokenizer"]      = tokenizer
     _state["model"]          = model
     _state["categories_str"] = ", ".join(CATEGORIES)
     _state["translator"]     = Translator()
-    _state["mt5_tokenizer"]  = mt5_tokenizer
-    _state["mt5_model"]      = mt5_model
 
     print("\n✅ Server ready — waiting for requests.\n")
     yield
@@ -135,13 +142,12 @@ app = FastAPI(title="Car Rental Review Inference", lifespan=lifespan)
 # ── Inference ──────────────────────────────────────────────────────────────────
 
 def _build_analysis(req: ReviewRequest, english_review: str, detected_language: str,
-                    summary: str, categories: List[str], sentiment: str) -> ReviewAnalysis:
+                    categories: List[str], sentiment: str) -> ReviewAnalysis:
     flags = _category_flags(categories)
     return ReviewAnalysis(
         original_review=req.review,
         detected_language=detected_language,
         english_translation=english_review if detected_language != "en" else None,
-        summary=summary,
         sentiment=sentiment,
         categories=categories,
         elasticsearch=ElasticsearchDoc(
@@ -163,50 +169,6 @@ def _build_analysis(req: ReviewRequest, english_review: str, detected_language: 
     )
 
 
-def _mt5_summarize(review: str) -> str:
-    tokenizer  = _state["mt5_tokenizer"]
-    model      = _state["mt5_model"]
-    device     = _state["device"]
-    translator = _state["translator"]
-    inputs = tokenizer(
-        WHITESPACE_HANDLER(review), return_tensors="pt", truncation=True, max_length=512
-    ).to(device)
-    with torch.no_grad():
-        tokens = model.generate(
-            input_ids=inputs["input_ids"],
-            attention_mask=inputs["attention_mask"],
-            max_new_tokens=80,
-            num_beams=4,
-            no_repeat_ngram_size=2,
-            length_penalty=0.8,
-        )
-    native_summary = tokenizer.decode(tokens[0], skip_special_tokens=True)
-    english_summary, _ = translator.to_english(native_summary)
-    return english_summary
-
-
-def _mt5_summarize_batch(reviews: List[str]) -> List[str]:
-    tokenizer  = _state["mt5_tokenizer"]
-    model      = _state["mt5_model"]
-    device     = _state["device"]
-    translator = _state["translator"]
-    inputs = tokenizer(
-        [WHITESPACE_HANDLER(r) for r in reviews],
-        return_tensors="pt", padding=True, truncation=True, max_length=512,
-    ).to(device)
-    with torch.no_grad():
-        tokens = model.generate(
-            input_ids=inputs["input_ids"],
-            attention_mask=inputs["attention_mask"],
-            max_new_tokens=80,
-            num_beams=4,
-            no_repeat_ngram_size=2,
-            length_penalty=0.8,
-        )
-    native_summaries = tokenizer.batch_decode(tokens, skip_special_tokens=True)
-    return [translator.to_english(s)[0] for s in native_summaries]
-
-
 def _analyse(req: ReviewRequest) -> ReviewAnalysis:
     tokenizer      = _state["tokenizer"]
     model          = _state["model"]
@@ -225,7 +187,6 @@ def _analyse(req: ReviewRequest) -> ReviewAnalysis:
         )[0]
         return tokenizer.decode(tokens, skip_special_tokens=True)
 
-    summary    = _mt5_summarize(req.review)
     categories = _parse_categories(_generate(
         f"Classify this car rental review into 1-3 of these categories: {categories_str}.\n"
         f"Use 'Insurance & Upselling' if insurance or extra products were pushed or required.\n"
@@ -240,7 +201,7 @@ def _analyse(req: ReviewRequest) -> ReviewAnalysis:
         max_new_tokens=5,
     ))
 
-    return _build_analysis(req, english_review, detected_language, summary, categories, sentiment)
+    return _build_analysis(req, english_review, detected_language, categories, sentiment)
 
 
 def _analyse_batch(requests: List[ReviewRequest]) -> List[ReviewAnalysis]:
@@ -268,7 +229,6 @@ def _analyse_batch(requests: List[ReviewRequest]) -> List[ReviewAnalysis]:
         )
         return tokenizer.batch_decode(tokens, skip_special_tokens=True)
 
-    summaries      = _mt5_summarize_batch(original_reviews)
     categories_raw = _batch_generate(
         [
             f"Classify this car rental review into 1-3 of these categories: {categories_str}.\n"
@@ -292,15 +252,146 @@ def _analyse_batch(requests: List[ReviewRequest]) -> List[ReviewAnalysis]:
     return [
         _build_analysis(
             req, eng, lang,
-            summary,
             _parse_categories(cats_str),
             _parse_sentiment(sent_raw),
         )
-        for req, eng, lang, summary, cats_str, sent_raw in zip(
+        for req, eng, lang, cats_str, sent_raw in zip(
             requests, english_reviews, detected_languages,
-            summaries, categories_raw, sentiments_raw,
+            categories_raw, sentiments_raw,
         )
     ]
+
+
+# ── Aggregate ──────────────────────────────────────────────────────────────────
+
+_CATEGORY_NATURAL = {
+    "Staff & Communication":  "staff and communication",
+    "Vehicle Condition":      "vehicle condition",
+    "Pickup Experience":      "the pickup process",
+    "Return Experience":      "the return process",
+    "Hidden Fees & Billing":  "unexpected charges",
+    "Insurance & Upselling":  "insurance upselling",
+    "Cleanliness":            "vehicle cleanliness",
+    "Booking & App":          "the booking experience",
+}
+
+
+def _build_aggregate_narrative(
+    total: int, provider, location, renter,
+    pos: int, neg: int, mixed: int,
+    praised_cats: List[str], complaint_cats: List[str],
+    upselling_count: int, fees_count: int, damage_count: int,
+) -> str:
+    parts = []
+    if renter:
+        parts.append(renter)
+    elif provider:
+        parts.append(provider)
+    if location:
+        parts.append(location)
+    context = " at ".join(parts) if parts else "this rental location"
+
+    pos_pct = round(100 * pos / total) if total else 0
+    neg_pct = round(100 * neg / total) if total else 0
+
+    sentences = []
+
+    # Positive part
+    if praised_cats and pos_pct > 15:
+        phrases = [_CATEGORY_NATURAL.get(c, c.lower()) for c in praised_cats[:2]]
+        praised_str = f"{phrases[0]} and {phrases[1]}" if len(phrases) > 1 else phrases[0]
+        sentences.append(
+            f"Customers appreciate the {praised_str} at {context}."
+        )
+    else:
+        sentences.append(f"Customers have shared their experiences with {context}.")
+
+    # Negative / flag part
+    issue_phrases = []
+    if complaint_cats and neg_pct > 15:
+        phrases = [_CATEGORY_NATURAL.get(c, c.lower()) for c in complaint_cats[:2]]
+        issue_phrases.extend(phrases)
+
+    flag_phrases = []
+    if upselling_count:
+        flag_phrases.append("insurance upselling")
+    if fees_count:
+        flag_phrases.append("unexpected charges")
+    if damage_count:
+        flag_phrases.append("disputed damage claims")
+
+    # Merge complaint categories and flags, deduplicate
+    all_issues = list(dict.fromkeys(issue_phrases + flag_phrases))[:3]
+
+    if all_issues:
+        issues_str = ", ".join(all_issues[:-1]) + (" and " if len(all_issues) > 1 else "") + all_issues[-1]
+        sentences.append(
+            f"However, some reviewers report issues with {issues_str}."
+        )
+
+    return " ".join(sentences)
+
+
+def _aggregate(req: AggregateRequest) -> AggregateResponse:
+    from collections import Counter
+
+    results = _analyse_batch(req.reviews)
+    total = len(results)
+
+    sentiment_counts = {"positive": 0, "negative": 0, "mixed": 0}
+    all_cats: Counter = Counter()
+    positive_cats: Counter = Counter()
+    negative_cats: Counter = Counter()
+
+    for r in results:
+        sentiment_counts[r.sentiment] = sentiment_counts.get(r.sentiment, 0) + 1
+        for cat in r.categories:
+            all_cats[cat] += 1
+            if r.sentiment == "positive":
+                positive_cats[cat] += 1
+            elif r.sentiment == "negative":
+                negative_cats[cat] += 1
+
+    top_categories = [c for c, _ in all_cats.most_common(3)]
+    praised    = [c for c, _ in positive_cats.most_common(2)]
+    complained = [c for c, _ in negative_cats.most_common(2)]
+
+    upselling_count  = sum(1 for r in results if r.elasticsearch.has_upselling)
+    hidden_fees_count = sum(1 for r in results if r.elasticsearch.has_hidden_fees)
+    damage_count     = sum(1 for r in results if r.elasticsearch.has_damage_claim)
+
+    pos   = sentiment_counts["positive"]
+    neg   = sentiment_counts["negative"]
+    mixed = sentiment_counts["mixed"]
+
+    narrative = _build_aggregate_narrative(
+        total=total, provider=req.provider, location=req.location, renter=req.renter,
+        pos=pos, neg=neg, mixed=mixed,
+        praised_cats=praised, complaint_cats=complained,
+        upselling_count=upselling_count, fees_count=hidden_fees_count, damage_count=damage_count,
+    )
+
+    return AggregateResponse(
+        provider=req.provider,
+        location=req.location,
+        renter=req.renter,
+        total_reviews=total,
+        sentiment_distribution={
+            "positive":     pos,
+            "negative":     neg,
+            "mixed":        mixed,
+            "positive_pct": round(100 * pos / total) if total else 0,
+            "negative_pct": round(100 * neg / total) if total else 0,
+            "mixed_pct":    round(100 * mixed / total) if total else 0,
+        },
+        top_categories=top_categories,
+        flags={
+            "upselling_count":   upselling_count,
+            "hidden_fees_count": hidden_fees_count,
+            "damage_claims_count": damage_count,
+        },
+        aggregate_summary=narrative,
+    )
 
 
 # ── Routes ─────────────────────────────────────────────────────────────────────
@@ -313,6 +404,11 @@ def infer(req: ReviewRequest):
 @app.post("/infer/batch", response_model=List[ReviewAnalysis])
 def infer_batch(req: BatchReviewRequest):
     return _analyse_batch(req.reviews)
+
+
+@app.post("/infer/aggregate", response_model=AggregateResponse)
+def infer_aggregate(req: AggregateRequest):
+    return _aggregate(req)
 
 
 @app.get("/health")

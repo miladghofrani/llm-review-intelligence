@@ -11,7 +11,7 @@ from app.peft_trainer import load_saved_peft_model, setup_peft_lora_model, train
 
 
 def train():
-    """Fine-tunes flan-t5 with LoRA on summarization + classification of car rental reviews."""
+    """Fine-tunes flan-t5 with LoRA on classification + sentiment of car rental reviews."""
     device = get_device()
 
     tokenizer = load_tokenizer()
@@ -31,7 +31,7 @@ def train():
 
 
 def infer(review: str, adapter_path: str = ADAPTER_PATH):
-    """Runs summarization and category classification on a single car rental review."""
+    """Runs category classification on a single car rental review."""
     device = get_device()
     tokenizer = load_tokenizer()
     base_model = load_llm_model(device)
@@ -43,18 +43,6 @@ def infer(review: str, adapter_path: str = ADAPTER_PATH):
     print("-" * 60)
     print(review)
     print("-" * 60)
-
-    # --- Summarization ---
-    summary_prompt = f"Summarize the following car rental review.\n\n{review}\n\nSummary:"
-    summary_inputs = tokenizer(summary_prompt, return_tensors="pt").to(device)
-    summary_tokens = model.generate(
-        input_ids=summary_inputs["input_ids"],
-        max_new_tokens=60,
-        do_sample=False,
-        repetition_penalty=1.3,
-        no_repeat_ngram_size=3,
-    )[0]
-    summary = tokenizer.decode(summary_tokens, skip_special_tokens=True)
 
     # --- Classification ---
     category_prompt = (
@@ -72,11 +60,10 @@ def infer(review: str, adapter_path: str = ADAPTER_PATH):
     )[0]
     categories = tokenizer.decode(category_tokens, skip_special_tokens=True)
 
-    print(f"\n✨ Summary   : {summary}")
-    print(f"🏷️  Categories: {categories}")
+    print(f"\n🏷️  Categories: {categories}")
     print("-" * 60)
 
-    return {"summary": summary, "categories": categories}
+    return {"categories": categories}
 
 
 if __name__ == "__main__":
