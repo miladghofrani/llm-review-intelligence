@@ -4,6 +4,10 @@ import os
 MODEL_NAME   = os.getenv("MODEL_NAME",   "google/flan-t5-large")
 ADAPTER_PATH = os.getenv("ADAPTER_PATH", "miladghofrani/car-rental-peft-adapter-large")
 
+# Max reviews per model.generate() call in /infer/batch and /infer/aggregate.
+# Bounds peak memory regardless of how many reviews are submitted in one request.
+BATCH_CHUNK_SIZE = int(os.getenv("BATCH_CHUNK_SIZE", "16"))
+
 # Training — set MAX_STEPS=0 (or unset) for full training, any positive int for dry run
 MAX_STEPS = int(os.getenv("MAX_STEPS", "0")) or None
 LEARNING_RATE = float(os.getenv("LEARNING_RATE", "1e-3"))

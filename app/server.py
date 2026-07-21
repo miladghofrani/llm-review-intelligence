@@ -4,7 +4,7 @@ from typing import List, Optional
 from fastapi import FastAPI
 from pydantic import BaseModel
 
-from config import ADAPTER_PATH, CATEGORIES
+from config import ADAPTER_PATH, BATCH_CHUNK_SIZE, CATEGORIES
 
 from .device_utils import get_device
 from .language_detector import LanguageDetector
@@ -171,7 +171,21 @@ def _analyse(req: ReviewRequest) -> ElasticsearchDoc:
     return _build_analysis(req, detected_language, categories, sentiment)
 
 
+def _chunked(items: List, size: int):
+    for i in range(0, len(items), size):
+        yield items[i:i + size]
+
+
 def _analyse_batch(requests: List[ReviewRequest]) -> List[ElasticsearchDoc]:
+    chunks = list(_chunked(requests, BATCH_CHUNK_SIZE))
+    results = []
+    for i, chunk in enumerate(chunks, start=1):
+        print(f"  Processing chunk {i}/{len(chunks)} ({len(chunk)} reviews)...")
+        results.extend(_analyse_chunk(chunk))
+    return results
+
+
+def _analyse_chunk(requests: List[ReviewRequest]) -> List[ElasticsearchDoc]:
     tokenizer      = _state["tokenizer"]
     model          = _state["model"]
     device         = _state["device"]
@@ -335,6 +349,27 @@ def _build_aggregate_narrative(
     return " ".join(sentences)
 
 
+def _net_category_sentiment(positive_cats, negative_cats):
+    """
+    Assigns each category to at most one side (praised or complained about),
+    based on net sentiment (positive mentions - negative mentions). Prevents
+    a high-volume category like Pickup Experience from appearing as both
+    praised and criticized just because it's mentioned often overall.
+    """
+    categories = set(positive_cats) | set(negative_cats)
+    praised, complained = [], []
+    for cat in categories:
+        net = positive_cats.get(cat, 0) - negative_cats.get(cat, 0)
+        if net > 0:
+            praised.append((cat, net))
+        elif net < 0:
+            complained.append((cat, -net))
+
+    praised.sort(key=lambda x: -x[1])
+    complained.sort(key=lambda x: -x[1])
+    return [c for c, _ in praised], [c for c, _ in complained]
+
+
 def _aggregate(req: AggregateRequest) -> AggregateResponse:
     from collections import Counter
 
@@ -356,8 +391,9 @@ def _aggregate(req: AggregateRequest) -> AggregateResponse:
                 negative_cats[cat] += 1
 
     top_categories = [c for c, _ in all_cats.most_common(3)]
-    praised    = [c for c, _ in positive_cats.most_common(3)]
-    complained = [c for c, _ in negative_cats.most_common(2)]
+    praised, complained = _net_category_sentiment(positive_cats, negative_cats)
+    praised    = praised[:3]
+    complained = complained[:2]
 
     upselling_count  = sum(1 for r in results if r.has_upselling)
     hidden_fees_count = sum(1 for r in results if r.has_hidden_fees)

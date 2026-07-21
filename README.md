@@ -137,7 +137,7 @@ Same fields per review, wrapped in a list:
 }
 ```
 
-Batching runs 2 `model.generate()` calls (categories, sentiment) over all reviews at once — significantly faster than calling `/infer` in a loop.
+Reviews are processed in chunks of `BATCH_CHUNK_SIZE` (default 16, see `.env.example`) — 2 `model.generate()` calls (categories, sentiment) per chunk — so memory use stays bounded no matter how many reviews are submitted, while still being significantly faster than calling `/infer` in a loop.
 
 ### `GET /health`
 
