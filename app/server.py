@@ -330,7 +330,7 @@ def _build_aggregate_narrative(
     all_issues = list(dict.fromkeys(issue_phrases + flag_phrases))[:2]
 
     if all_issues:
-        sentences.append(f"Main issues: {', '.join(all_issues)}.")
+        sentences.append(f"Some customers also had issues with {_join_with_and(all_issues)}.")
 
     return " ".join(sentences)
 
