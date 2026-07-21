@@ -232,13 +232,19 @@ def _analyse_batch(requests: List[ReviewRequest]) -> List[ElasticsearchDoc]:
 _CATEGORY_NATURAL = {
     "Staff & Communication":  "staff and communication",
     "Vehicle Condition":      "vehicle condition",
-    "Pickup Experience":      "the pickup process",
-    "Return Experience":      "the return process",
+    "Pickup Experience":      "pickup process",
+    "Return Experience":      "return process",
     "Hidden Fees & Billing":  "unexpected charges",
     "Insurance & Upselling":  "insurance upselling",
     "Cleanliness":            "vehicle cleanliness",
-    "Booking & App":          "the booking experience",
+    "Booking & App":          "booking experience",
 }
+
+
+def _join_with_and(phrases: List[str]) -> str:
+    if len(phrases) == 1:
+        return phrases[0]
+    return ", ".join(phrases[:-1]) + " and " + phrases[-1]
 
 
 RATING_FIELDS = [
@@ -297,21 +303,20 @@ def _build_aggregate_narrative(
 
     sentences = []
 
-    # Positive part
+    # Positive part — up to 3 categories plus the overall positive percentage
     if praised_cats and pos_pct > 15:
-        phrases = [_CATEGORY_NATURAL.get(c, c.lower()) for c in praised_cats[:2]]
-        praised_str = f"{phrases[0]} and {phrases[1]}" if len(phrases) > 1 else phrases[0]
+        phrases = [_CATEGORY_NATURAL.get(c, c.lower()) for c in praised_cats[:3]]
         sentences.append(
-            f"Customers appreciate the {praised_str} at {context}."
+            f"Customers appreciate the {_join_with_and(phrases)} at {context}, "
+            f"with {pos_pct}% of reviews reflecting a positive experience overall."
         )
     else:
         sentences.append(f"Customers have shared their experiences with {context}.")
 
-    # Negative / flag part
+    # Negative / flag part — top 2 issues, terse
     issue_phrases = []
     if complaint_cats and neg_pct > 15:
-        phrases = [_CATEGORY_NATURAL.get(c, c.lower()) for c in complaint_cats[:2]]
-        issue_phrases.extend(phrases)
+        issue_phrases.extend(_CATEGORY_NATURAL.get(c, c.lower()) for c in complaint_cats[:2])
 
     flag_phrases = []
     if upselling_count:
@@ -321,14 +326,11 @@ def _build_aggregate_narrative(
     if damage_count:
         flag_phrases.append("disputed damage claims")
 
-    # Merge complaint categories and flags, deduplicate
-    all_issues = list(dict.fromkeys(issue_phrases + flag_phrases))[:3]
+    # Merge complaint categories and flags, deduplicate, cap at 2
+    all_issues = list(dict.fromkeys(issue_phrases + flag_phrases))[:2]
 
     if all_issues:
-        issues_str = ", ".join(all_issues[:-1]) + (" and " if len(all_issues) > 1 else "") + all_issues[-1]
-        sentences.append(
-            f"However, some reviewers report issues with {issues_str}."
-        )
+        sentences.append(f"Main issues: {', '.join(all_issues)}.")
 
     return " ".join(sentences)
 
@@ -354,7 +356,7 @@ def _aggregate(req: AggregateRequest) -> AggregateResponse:
                 negative_cats[cat] += 1
 
     top_categories = [c for c, _ in all_cats.most_common(3)]
-    praised    = [c for c, _ in positive_cats.most_common(2)]
+    praised    = [c for c, _ in positive_cats.most_common(3)]
     complained = [c for c, _ in negative_cats.most_common(2)]
 
     upselling_count  = sum(1 for r in results if r.has_upselling)

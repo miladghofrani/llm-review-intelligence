@@ -1,0 +1,55 @@
+{
+  "provider": "Sunny Cars",
+  "location": "Izmir",
+  "renter": "Circular Car Hire",
+  "reviews": [
+    {
+      "review": "Die Kontaktaufnahme war schwierig (Sprachbarriere), es hat ewig gedauert, bis der Vertreter eintraf. Bei Übernahme war bereits die Reifendruckanzeige aktiv. Die Rückgabe war ebenso eine unschöne Situation, weil angeblich der Mietwagen dreckig sei.",
+      "database_id": 489251,
+      "aggregate_rating": 2,
+      "renter_rating": 2,
+      "car_condition_rating": 3,
+      "processing_speed_rating": 2,
+      "provider_care_rating": 1,
+      "service_level_rating": 1,
+      "recommendation_rating": 2
+    },
+    {
+      "review": "Fantastic experience from start to finish. The car was spotless and ready on time. Staff were friendly with no upselling pressure whatsoever. Return took under five minutes.",
+      "database_id": 489252,
+      "aggregate_rating": 9,
+      "renter_rating": 9.5,
+      "car_condition_rating": 10,
+      "processing_speed_rating": 9,
+      "provider_care_rating": 10,
+      "service_level_rating": 9,
+      "recommendation_rating": 10
+    },
+    {
+      "review": "Le vehicule etait propre mais l'attente au comptoir a pris plus d'une heure. Le personnel a essaye de me vendre une assurance supplementaire de maniere insistante.",
+      "database_id": 489253,
+      "aggregate_rating": 5,
+      "renter_rating": 4,
+      "processing_speed_rating": 3,
+      "provider_care_rating": 4,
+      "recommendation_rating": 6
+    },
+    {
+      "review": "Nightmare from start to finish. The car smelled of cigarettes and had visible damage not noted on the contract. Staff were dismissive when I raised concerns. On top of that they charged an unexplained cleaning fee.",
+      "database_id": 489254,
+      "aggregate_rating": 1,
+      "renter_rating": 1.5,
+      "car_condition_rating": 2,
+      "provider_care_rating": 1,
+      "service_level_rating": 2,
+      "recommendation_rating": 0
+    },
+    {
+      "review": "Alles in Ordnung, keine besonderen Vorkommnisse. Abholung und Rückgabe liefen reibungslos.",
+      "database_id": 489255,
+      "aggregate_rating": 7,
+      "renter_rating": 7,
+      "recommendation_rating": 8
+    }
+  ]
+}
