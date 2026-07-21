@@ -111,17 +111,14 @@ curl -X POST http://localhost:8742/infer/batch \
 
 ### `POST /infer`
 
-Analyse a single review. `database_id` and the rating fields are optional — `database_id` is echoed back in the response as the merge key, while the ratings feed the averages/NPS computed in `/infer/aggregate` (not returned here).
+Analyse a single review. `database_id` and the rating fields are optional — `database_id` is echoed back in the response as the merge key, while `car_condition_rating`/`processing_speed_rating`/`service_level_rating` feed the averages and `recommendation_rating` feeds the NPS score computed in `/infer/aggregate` (none of these are returned here).
 
 ```json
 {
   "review": "string (required)",
   "database_id": 489244,
-  "aggregate_rating": 2.5,
-  "renter_rating": 2.33,
   "car_condition_rating": 4,
   "processing_speed_rating": 3,
-  "provider_care_rating": 5,
   "service_level_rating": 4,
   "recommendation_rating": 8
 }

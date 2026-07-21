@@ -21,11 +21,8 @@ def _extract(entry: dict) -> dict | None:
     return {
         "review":                   review,
         "database_id":              fields.get("databaseId",             [None])[0],
-        "aggregate_rating":         fields.get("aggregateRating",        [None])[0],
-        "renter_rating":            fields.get("renterRating",           [None])[0],
         "car_condition_rating":     fields.get("carConditionRating",     [None])[0],
         "processing_speed_rating":  fields.get("processingSpeedRating",  [None])[0],
-        "provider_care_rating":     fields.get("providerCareRating",     [None])[0],
         "service_level_rating":     fields.get("serviceLevelRating",     [None])[0],
         "recommendation_rating":    fields.get("recommendationRating",   [None])[0],
     }

@@ -46,13 +46,10 @@ class ReviewRequest(BaseModel):
     database_id: Optional[int] = None    # identifies the ES document to merge the enrichment into
     # Customer-given rating scores — not echoed back in the response (the caller
     # already has these), but used to compute averages/NPS in /infer/aggregate.
-    aggregate_rating: Optional[float] = None
-    renter_rating: Optional[float] = None
     car_condition_rating: Optional[float] = None
     processing_speed_rating: Optional[float] = None
-    provider_care_rating: Optional[float] = None
     service_level_rating: Optional[float] = None
-    recommendation_rating: Optional[float] = None   # 0-10 NPS-style score
+    recommendation_rating: Optional[float] = None   # 0-10 NPS-style score, used for NPS only
 
 
 class ElasticsearchDoc(BaseModel):
@@ -262,13 +259,9 @@ def _join_with_and(phrases: List[str]) -> str:
 
 
 RATING_FIELDS = [
-    "aggregate_rating",
-    "renter_rating",
     "car_condition_rating",
     "processing_speed_rating",
-    "provider_care_rating",
     "service_level_rating",
-    "recommendation_rating",
 ]
 
 
