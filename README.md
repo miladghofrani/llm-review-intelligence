@@ -12,20 +12,14 @@ Send a review (in any language) and get back:
 
 ```json
 {
-  "original_review": "Katastrophale Abwicklung. Insgesamt standen wir über eine Stunde an...",
-  "detected_language": "de",
+  "database_id": 489242,
+  "language": "de",
   "sentiment": "negative",
+  "primary_category": "Pickup Experience",
   "categories": ["Pickup Experience", "Insurance & Upselling", "Return Experience"],
-  "elasticsearch": {
-    "database_id": 489242,
-    "language": "de",
-    "sentiment": "negative",
-    "primary_category": "Pickup Experience",
-    "categories": ["Pickup Experience", "Insurance & Upselling", "Return Experience"],
-    "has_damage_claim": false,
-    "has_hidden_fees": false,
-    "has_upselling": true
-  }
+  "has_damage_claim": false,
+  "has_hidden_fees": false,
+  "has_upselling": true
 }
 ```
 
@@ -33,7 +27,7 @@ Send a review (in any language) and get back:
 
 **Languages:** German, French, English (auto-detected via `langdetect`; the model classifies the review directly in its original language)
 
-The response only contains `database_id` (to identify which Elasticsearch document to merge the enrichment into) plus what the model actually generated — provider/renter/location/ratings aren't echoed back since the caller already has them.
+The response only contains `database_id` (to identify which Elasticsearch document to merge the enrichment into) plus what the model actually generated — the original review text, provider/renter/location, and ratings aren't echoed back since the caller already has them.
 
 ---
 
@@ -117,7 +111,7 @@ curl -X POST http://localhost:8742/infer/batch \
 
 ### `POST /infer`
 
-Analyse a single review. `database_id` and the rating fields are optional — `database_id` is echoed back in the `elasticsearch` output as the merge key, while the ratings feed the averages/NPS computed in `/infer/aggregate` (not returned here).
+Analyse a single review. `database_id` and the rating fields are optional — `database_id` is echoed back in the response as the merge key, while the ratings feed the averages/NPS computed in `/infer/aggregate` (not returned here).
 
 ```json
 {

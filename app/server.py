@@ -71,14 +71,6 @@ class ElasticsearchDoc(BaseModel):
     has_upselling: bool
 
 
-class ReviewAnalysis(BaseModel):
-    original_review: str
-    detected_language: str
-    sentiment: str
-    categories: List[str]
-    elasticsearch: ElasticsearchDoc
-
-
 class BatchReviewRequest(BaseModel):
     reviews: List[ReviewRequest]
 
@@ -132,25 +124,19 @@ app = FastAPI(title="Car Rental Review Inference", lifespan=lifespan)
 # ── Inference ──────────────────────────────────────────────────────────────────
 
 def _build_analysis(req: ReviewRequest, detected_language: str,
-                    categories: List[str], sentiment: str) -> ReviewAnalysis:
+                    categories: List[str], sentiment: str) -> ElasticsearchDoc:
     flags = _category_flags(categories)
-    return ReviewAnalysis(
-        original_review=req.review,
-        detected_language=detected_language,
+    return ElasticsearchDoc(
+        database_id=req.database_id,
+        language=detected_language,
         sentiment=sentiment,
+        primary_category=categories[0] if categories else "Staff & Communication",
         categories=categories,
-        elasticsearch=ElasticsearchDoc(
-            database_id=req.database_id,
-            language=detected_language,
-            sentiment=sentiment,
-            primary_category=categories[0] if categories else "Staff & Communication",
-            categories=categories,
-            **flags,
-        ),
+        **flags,
     )
 
 
-def _analyse(req: ReviewRequest) -> ReviewAnalysis:
+def _analyse(req: ReviewRequest) -> ElasticsearchDoc:
     tokenizer      = _state["tokenizer"]
     model          = _state["model"]
     device         = _state["device"]
@@ -185,7 +171,7 @@ def _analyse(req: ReviewRequest) -> ReviewAnalysis:
     return _build_analysis(req, detected_language, categories, sentiment)
 
 
-def _analyse_batch(requests: List[ReviewRequest]) -> List[ReviewAnalysis]:
+def _analyse_batch(requests: List[ReviewRequest]) -> List[ElasticsearchDoc]:
     tokenizer      = _state["tokenizer"]
     model          = _state["model"]
     device         = _state["device"]
@@ -371,9 +357,9 @@ def _aggregate(req: AggregateRequest) -> AggregateResponse:
     praised    = [c for c, _ in positive_cats.most_common(2)]
     complained = [c for c, _ in negative_cats.most_common(2)]
 
-    upselling_count  = sum(1 for r in results if r.elasticsearch.has_upselling)
-    hidden_fees_count = sum(1 for r in results if r.elasticsearch.has_hidden_fees)
-    damage_count     = sum(1 for r in results if r.elasticsearch.has_damage_claim)
+    upselling_count  = sum(1 for r in results if r.has_upselling)
+    hidden_fees_count = sum(1 for r in results if r.has_hidden_fees)
+    damage_count     = sum(1 for r in results if r.has_damage_claim)
 
     pos   = sentiment_counts["positive"]
     neg   = sentiment_counts["negative"]
@@ -416,12 +402,12 @@ def _aggregate(req: AggregateRequest) -> AggregateResponse:
 
 # ── Routes ─────────────────────────────────────────────────────────────────────
 
-@app.post("/infer", response_model=ReviewAnalysis)
+@app.post("/infer", response_model=ElasticsearchDoc)
 def infer(req: ReviewRequest):
     return _analyse(req)
 
 
-@app.post("/infer/batch", response_model=List[ReviewAnalysis])
+@app.post("/infer/batch", response_model=List[ElasticsearchDoc])
 def infer_batch(req: BatchReviewRequest):
     return _analyse_batch(req.reviews)
 
