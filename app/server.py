@@ -50,6 +50,11 @@ class ReviewRequest(BaseModel):
     processing_speed_rating: Optional[float] = None
     service_level_rating: Optional[float] = None
     recommendation_rating: Optional[float] = None   # 0-10 NPS-style score, used for NPS only
+    # Pre-computed AI results from a prior /infer or /infer/batch call, already
+    # stored in Elasticsearch. When both are set, /infer/aggregate skips
+    # re-running classification/sentiment for this review entirely.
+    sentiment: Optional[str] = None
+    categories: Optional[List[str]] = None
 
 
 class ElasticsearchDoc(BaseModel):
@@ -258,6 +263,37 @@ def _join_with_and(phrases: List[str]) -> str:
     return ", ".join(phrases[:-1]) + " and " + phrases[-1]
 
 
+def _pick(templates: List[str], seed_parts: list) -> str:
+    """
+    Deterministically picks one of several phrasings based on a hash of the
+    inputs — varies the wording across different aggregates (different
+    provider/categories/percentages) while staying stable for the same
+    inputs, so repeated identical calls produce identical text.
+    """
+    import hashlib
+    seed = "|".join(str(p) for p in seed_parts)
+    index = int(hashlib.md5(seed.encode()).hexdigest(), 16) % len(templates)
+    return templates[index]
+
+
+_POSITIVE_TEMPLATES = [
+    "Customers appreciate the {phrases} at {context}, with {pct}% of reviews reflecting a positive experience overall.",
+    "Feedback for {context} skews positive at {pct}%, with praise centered on the {phrases}.",
+    "The majority of reviews for {context} are positive ({pct}%), especially around the {phrases}.",
+]
+
+_FALLBACK_TEMPLATES = [
+    "Customers have shared their experiences with {context}.",
+    "Reviews for {context} reflect a mix of experiences.",
+]
+
+_NEGATIVE_TEMPLATES = [
+    "Some customers also had issues with {phrases}.",
+    "A number of reviewers flagged concerns around {phrases}.",
+    "On the downside, {phrases} came up as recurring complaints.",
+]
+
+
 RATING_FIELDS = [
     "car_condition_rating",
     "processing_speed_rating",
@@ -313,12 +349,11 @@ def _build_aggregate_narrative(
     # Positive part — up to 3 categories plus the overall positive percentage
     if praised_cats and pos_pct > 15:
         phrases = [_CATEGORY_NATURAL.get(c, c.lower()) for c in praised_cats[:3]]
-        sentences.append(
-            f"Customers appreciate the {_join_with_and(phrases)} at {context}, "
-            f"with {pos_pct}% of reviews reflecting a positive experience overall."
-        )
+        template = _pick(_POSITIVE_TEMPLATES, [context, pos_pct, tuple(phrases)])
+        sentences.append(template.format(phrases=_join_with_and(phrases), context=context, pct=pos_pct))
     else:
-        sentences.append(f"Customers have shared their experiences with {context}.")
+        template = _pick(_FALLBACK_TEMPLATES, [context, total])
+        sentences.append(template.format(context=context))
 
     # Negative / flag part — top 2 issues, terse
     issue_phrases = []
@@ -337,7 +372,8 @@ def _build_aggregate_narrative(
     all_issues = list(dict.fromkeys(issue_phrases + flag_phrases))[:2]
 
     if all_issues:
-        sentences.append(f"Some customers also had issues with {_join_with_and(all_issues)}.")
+        template = _pick(_NEGATIVE_TEMPLATES, [context, tuple(all_issues)])
+        sentences.append(template.format(phrases=_join_with_and(all_issues)))
 
     return " ".join(sentences)
 
@@ -363,10 +399,28 @@ def _net_category_sentiment(positive_cats, negative_cats):
     return [c for c, _ in praised], [c for c, _ in complained]
 
 
+_VALID_SENTIMENTS = {"positive", "negative", "mixed"}
+
+
+def _is_precomputed(r: ReviewRequest) -> bool:
+    return r.sentiment in _VALID_SENTIMENTS and r.categories is not None
+
+
+def _precomputed_result(r: ReviewRequest):
+    from types import SimpleNamespace
+    flags = _category_flags(r.categories)
+    return SimpleNamespace(sentiment=r.sentiment, categories=r.categories, **flags)
+
+
 def _aggregate(req: AggregateRequest) -> AggregateResponse:
     from collections import Counter
 
-    results = _analyse_batch(req.reviews)
+    precomputed = [r for r in req.reviews if _is_precomputed(r)]
+    needs_analysis = [r for r in req.reviews if not _is_precomputed(r)]
+
+    results = [_precomputed_result(r) for r in precomputed]
+    if needs_analysis:
+        results.extend(_analyse_batch(needs_analysis))
     total = len(results)
 
     sentiment_counts = {"positive": 0, "negative": 0, "mixed": 0}

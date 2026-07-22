@@ -136,6 +136,22 @@ Same fields per review, wrapped in a list:
 
 Reviews are processed in chunks of `BATCH_CHUNK_SIZE` (default 16, see `.env.example`) — 2 `model.generate()` calls (categories, sentiment) per chunk — so memory use stays bounded no matter how many reviews are submitted, while still being significantly faster than calling `/infer` in a loop.
 
+### `POST /infer/aggregate`
+
+Turns a batch of reviews into an aggregate summary — sentiment distribution, top categories, upselling/fee/damage flags, average ratings, NPS, and a short narrative. Intended use: store each review's `sentiment`/`categories` in Elasticsearch as it comes in via `/infer` or `/infer/batch`, then send that already-scored data here to build the summary shown on an offer/listing page.
+
+```json
+{
+  "provider": "Rentalcars",
+  "reviews": [
+    { "review": "...", "sentiment": "positive", "categories": ["Cleanliness"], "recommendation_rating": 9 },
+    { "review": "a brand-new, not-yet-scored review" }
+  ]
+}
+```
+
+Any review with both `sentiment` and `categories` already set **skips model inference entirely** — the endpoint just does the counting/averaging/narrative math for it, which is effectively instant regardless of batch size. Only reviews missing one of those two fields go through the model. If your whole batch is already scored (the typical case once reviews are stored in Elasticsearch), this call does no model inference at all.
+
 ### `GET /health`
 
 Returns `{"status": "ok"}` when the model is loaded and ready.
